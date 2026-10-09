@@ -481,7 +481,7 @@ fn unwrap_keys(
     let mut dec =
         Aes256CbcDec::new_from_slices(key1, iv1).expect("key1 is 32 bytes and iv1 is 16 bytes");
     let mut buf = Zeroizing::new(*enc_keys);
-    for chunk in buf.chunks_exact_mut(BLOCK_LEN) {
+    for chunk in buf.as_chunks_mut::<BLOCK_LEN>().0 {
         dec.decrypt_block_mut(GenericArray::from_mut_slice(chunk));
     }
     let mut iv2 = [0u8; IV_LEN];
