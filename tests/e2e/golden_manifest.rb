@@ -11,7 +11,9 @@ module Golden
   DIR       = File.expand_path("../fixtures/golden", __dir__) # tests/e2e -> tests/fixtures/golden
   PLAINTEXT = File.join(DIR, "plaintext.txt")
   # Fixed password for every golden. Public on purpose: these files exist only to
-  # be decrypted by the test, never to protect anything.
+  # be decrypted by the test, never to protect anything. The value keeps the
+  # original "paladin" project name — the committed goldens were encrypted with
+  # it, so it must never change.
   PASSWORD = "paladin golden v1"
 
   CIPHERS = %w[aes-256-gcm chacha20-poly1305].freeze
@@ -37,7 +39,9 @@ module Golden
 
   # The full golden set: the cipher × KDF matrix, one armored file, and one
   # stdin-encrypted file (which stores no original filename). Each entry says what
-  # `--info` must report so the test can assert it.
+  # `--info` must report so the test can assert it. The committed files keep
+  # their historical `.paladin` names: they predate the rename to aesc, and
+  # decrypting them also locks legacy-extension support.
   def self.manifest
     matrix = CIPHERS.product(KDFS).map do |cipher, kdf|
       entry("#{cipher}.#{kdf}.paladin", cipher, kdf)
@@ -59,6 +63,6 @@ module Golden
 
   # The CLI binary under test (shared resolution with the e2e harness).
   def self.binary
-    ENV["PALADIN_BIN"] || File.expand_path("../../target/debug/paladin", __dir__)
+    ENV["AESC_BIN"] || File.expand_path("../../target/debug/aesc", __dir__)
   end
 end

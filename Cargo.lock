@@ -38,6 +38,81 @@ dependencies = [
 ]
 
 [[package]]
+name = "aesc-cli"
+version = "0.2.1"
+dependencies = [
+ "aesc-common",
+ "aesc-core",
+ "assert_cmd",
+ "clap",
+ "ctrlc",
+ "indicatif",
+ "predicates",
+ "rpassword",
+ "tempfile",
+ "zeroize",
+]
+
+[[package]]
+name = "aesc-common"
+version = "0.2.1"
+dependencies = [
+ "aesc-core",
+ "tempfile",
+ "thiserror 2.0.18",
+ "zeroize",
+]
+
+[[package]]
+name = "aesc-core"
+version = "0.2.1"
+dependencies = [
+ "aes",
+ "aes-gcm",
+ "argon2",
+ "base64",
+ "cbc",
+ "chacha20poly1305",
+ "getrandom 0.4.2",
+ "hex",
+ "hmac",
+ "pbkdf2",
+ "scrypt",
+ "sha2 0.11.0",
+ "tempfile",
+ "thiserror 2.0.18",
+ "zeroize",
+]
+
+[[package]]
+name = "aesc-gtk"
+version = "0.2.1"
+dependencies = [
+ "aesc-core",
+ "anyhow",
+ "gtk4",
+ "libadwaita",
+ "relm4",
+ "relm4-components",
+ "tempfile",
+ "zeroize",
+]
+
+[[package]]
+name = "aesc-tui"
+version = "0.2.1"
+dependencies = [
+ "aesc-common",
+ "aesc-core",
+ "anyhow",
+ "clap",
+ "crossterm",
+ "ratatui",
+ "tempfile",
+ "zeroize",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1657,81 +1732,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7bb71e1b3fa6ca1c61f383464aaf2bb0e2f8e772a1f01d486832464de363b951"
 dependencies = [
  "num-traits",
-]
-
-[[package]]
-name = "paladin-cli"
-version = "0.2.1"
-dependencies = [
- "assert_cmd",
- "clap",
- "ctrlc",
- "indicatif",
- "paladin-common",
- "paladin-core",
- "predicates",
- "rpassword",
- "tempfile",
- "zeroize",
-]
-
-[[package]]
-name = "paladin-common"
-version = "0.2.1"
-dependencies = [
- "paladin-core",
- "tempfile",
- "thiserror 2.0.18",
- "zeroize",
-]
-
-[[package]]
-name = "paladin-core"
-version = "0.2.1"
-dependencies = [
- "aes",
- "aes-gcm",
- "argon2",
- "base64",
- "cbc",
- "chacha20poly1305",
- "getrandom 0.4.2",
- "hex",
- "hmac",
- "pbkdf2",
- "scrypt",
- "sha2 0.11.0",
- "tempfile",
- "thiserror 2.0.18",
- "zeroize",
-]
-
-[[package]]
-name = "paladin-gtk"
-version = "0.2.1"
-dependencies = [
- "anyhow",
- "gtk4",
- "libadwaita",
- "paladin-core",
- "relm4",
- "relm4-components",
- "tempfile",
- "zeroize",
-]
-
-[[package]]
-name = "paladin-tui"
-version = "0.2.1"
-dependencies = [
- "anyhow",
- "clap",
- "crossterm",
- "paladin-common",
- "paladin-core",
- "ratatui",
- "tempfile",
- "zeroize",
 ]
 
 [[package]]

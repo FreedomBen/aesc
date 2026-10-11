@@ -1,4 +1,4 @@
-# nfpm config — paladin-gtk desktop package (.deb / .rpm).
+# nfpm config — aesc-gtk desktop package (.deb / .rpm).
 #
 # Built via `make package` (or package-deb / package-rpm), which exports the
 # VERSION and ARCH variables referenced below. To run nfpm by hand, set them
@@ -6,7 +6,16 @@
 #   VERSION=0.1.0 ARCH=amd64 nfpm package -f packaging/nfpm-gtk.yaml -p deb -t dist
 #
 # nfpm reference: https://nfpm.goreleaser.com
-name: paladin-gtk
+name: aesc-gtk
+# The package was renamed from "paladin-gtk"; declaring the old name lets package
+# managers treat this as its successor (deb: Replaces/Conflicts/Provides,
+# rpm: Obsoletes/Conflicts/Provides).
+provides:
+  - paladin-gtk
+replaces:
+  - paladin-gtk
+conflicts:
+  - paladin-gtk
 arch: ${ARCH}
 platform: linux
 version: ${VERSION}
@@ -20,62 +29,62 @@ license: "MIT OR Apache-2.0"
 description: |
   Simple, safe symmetric file encryption (GTK4/libadwaita desktop app).
 
-  A native desktop front-end over the same paladin core as the CLI:
+  A native desktop front-end over the same aesc core as the CLI:
   AES-256-GCM (or ChaCha20-Poly1305) with an Argon2id-derived key and a
   self-describing, authenticated file format. This package installs the
-  `paladin-gtk` application, its desktop entry, icon, and AppStream metainfo.
+  `aesc-gtk` application, its desktop entry, icon, and AppStream metainfo.
 
 contents:
-  - src: ./target/release/paladin-gtk
-    dst: /usr/bin/paladin-gtk
+  - src: ./target/release/aesc-gtk
+    dst: /usr/bin/aesc-gtk
     file_info:
       mode: 0755
-  - src: ./data/org.paladin.Gtk.desktop
-    dst: /usr/share/applications/org.paladin.Gtk.desktop
+  - src: ./data/org.aesc.Gtk.desktop
+    dst: /usr/share/applications/org.aesc.Gtk.desktop
     file_info:
       mode: 0644
-  - src: ./data/icons/hicolor/scalable/apps/org.paladin.Gtk.svg
-    dst: /usr/share/icons/hicolor/scalable/apps/org.paladin.Gtk.svg
+  - src: ./data/icons/hicolor/scalable/apps/org.aesc.Gtk.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/org.aesc.Gtk.svg
     file_info:
       mode: 0644
-  - src: ./data/icons/hicolor/symbolic/apps/org.paladin.Gtk-symbolic.svg
-    dst: /usr/share/icons/hicolor/symbolic/apps/org.paladin.Gtk-symbolic.svg
+  - src: ./data/icons/hicolor/symbolic/apps/org.aesc.Gtk-symbolic.svg
+    dst: /usr/share/icons/hicolor/symbolic/apps/org.aesc.Gtk-symbolic.svg
     file_info:
       mode: 0644
-  - src: ./data/icons/hicolor/16x16/apps/org.paladin.Gtk.png
-    dst: /usr/share/icons/hicolor/16x16/apps/org.paladin.Gtk.png
+  - src: ./data/icons/hicolor/16x16/apps/org.aesc.Gtk.png
+    dst: /usr/share/icons/hicolor/16x16/apps/org.aesc.Gtk.png
     file_info:
       mode: 0644
-  - src: ./data/icons/hicolor/24x24/apps/org.paladin.Gtk.png
-    dst: /usr/share/icons/hicolor/24x24/apps/org.paladin.Gtk.png
+  - src: ./data/icons/hicolor/24x24/apps/org.aesc.Gtk.png
+    dst: /usr/share/icons/hicolor/24x24/apps/org.aesc.Gtk.png
     file_info:
       mode: 0644
-  - src: ./data/icons/hicolor/32x32/apps/org.paladin.Gtk.png
-    dst: /usr/share/icons/hicolor/32x32/apps/org.paladin.Gtk.png
+  - src: ./data/icons/hicolor/32x32/apps/org.aesc.Gtk.png
+    dst: /usr/share/icons/hicolor/32x32/apps/org.aesc.Gtk.png
     file_info:
       mode: 0644
-  - src: ./data/icons/hicolor/48x48/apps/org.paladin.Gtk.png
-    dst: /usr/share/icons/hicolor/48x48/apps/org.paladin.Gtk.png
+  - src: ./data/icons/hicolor/48x48/apps/org.aesc.Gtk.png
+    dst: /usr/share/icons/hicolor/48x48/apps/org.aesc.Gtk.png
     file_info:
       mode: 0644
-  - src: ./data/icons/hicolor/64x64/apps/org.paladin.Gtk.png
-    dst: /usr/share/icons/hicolor/64x64/apps/org.paladin.Gtk.png
+  - src: ./data/icons/hicolor/64x64/apps/org.aesc.Gtk.png
+    dst: /usr/share/icons/hicolor/64x64/apps/org.aesc.Gtk.png
     file_info:
       mode: 0644
-  - src: ./data/icons/hicolor/128x128/apps/org.paladin.Gtk.png
-    dst: /usr/share/icons/hicolor/128x128/apps/org.paladin.Gtk.png
+  - src: ./data/icons/hicolor/128x128/apps/org.aesc.Gtk.png
+    dst: /usr/share/icons/hicolor/128x128/apps/org.aesc.Gtk.png
     file_info:
       mode: 0644
-  - src: ./data/icons/hicolor/256x256/apps/org.paladin.Gtk.png
-    dst: /usr/share/icons/hicolor/256x256/apps/org.paladin.Gtk.png
+  - src: ./data/icons/hicolor/256x256/apps/org.aesc.Gtk.png
+    dst: /usr/share/icons/hicolor/256x256/apps/org.aesc.Gtk.png
     file_info:
       mode: 0644
-  - src: ./data/icons/hicolor/512x512/apps/org.paladin.Gtk.png
-    dst: /usr/share/icons/hicolor/512x512/apps/org.paladin.Gtk.png
+  - src: ./data/icons/hicolor/512x512/apps/org.aesc.Gtk.png
+    dst: /usr/share/icons/hicolor/512x512/apps/org.aesc.Gtk.png
     file_info:
       mode: 0644
-  - src: ./data/org.paladin.Gtk.metainfo.xml
-    dst: /usr/share/metainfo/org.paladin.Gtk.metainfo.xml
+  - src: ./data/org.aesc.Gtk.metainfo.xml
+    dst: /usr/share/metainfo/org.aesc.Gtk.metainfo.xml
     file_info:
       mode: 0644
 

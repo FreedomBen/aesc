@@ -1,19 +1,19 @@
-# paladin — Implementation plan 02: CLI (`paladin`)
+# aesc — Implementation plan 02: CLI (`aesc`)
 
 **Status:** Ready for implementation. The two crates this front-end builds on —
-`paladin-core` and `paladin-common` — are complete (see
+`aesc-core` and `aesc-common` — are complete (see
 [`IMPLEMENTATION_PLAN_01_CORE.md`](IMPLEMENTATION_PLAN_01_CORE.md)), so the design
 is stable enough to expand this from a checklist stub into ordered steps.
 **Last updated:** 2026-05-30.
 
-**Scope.** The `paladin` binary (package `paladin-cli`) — a thin front-end that
-parses arguments, resolves the password, opens streams, calls `paladin-core`,
+**Scope.** The `aesc` binary (package `aesc-cli`) — a thin front-end that
+parses arguments, resolves the password, opens streams, calls `aesc-core`,
 and maps results to exit codes ([DESIGN §6](DESIGN.md#6-cli-specification)). It
 holds **no crypto or format logic**: cipher/KDF names, defaults, output-path
 rules, validation caps, and exit-code mapping all come from the shared crates.
 
 **Depends on:** [`IMPLEMENTATION_PLAN_01_CORE.md`](IMPLEMENTATION_PLAN_01_CORE.md)
-— `paladin-core` (the four operations + pure helpers) and the `paladin-common`
+— `aesc-core` (the four operations + pure helpers) and the `aesc-common`
 terminal glue.
 **Sibling plans:** [`IMPLEMENTATION_PLAN_03_TUI.md`](IMPLEMENTATION_PLAN_03_TUI.md),
 [`IMPLEMENTATION_PLAN_04_GTK.md`](IMPLEMENTATION_PLAN_04_GTK.md).
@@ -25,7 +25,7 @@ terminal glue.
 The CLI never re-implements any of the following; it gathers input and calls
 into these APIs. Verified against the current source.
 
-### From `paladin-core`
+### From `aesc-core`
 
 | Item                                              | Used by the CLI for                                            |
 | ------------------------------------------------- | -------------------------------------------------------------- |
@@ -39,9 +39,9 @@ into these APIs. Verified against the current source.
 | `Progress`, `OnProgress`                          | Progress-callback payload and signature.                     |
 | `default_encrypt_output` / `default_decrypt_output` | Default `-o` derivation (§6.5); decrypt needs a parsed `Header`. |
 | `KEYFILE_MAX_BYTES`                               | (Already enforced inside `read_keyfile`.)                    |
-| `PalError`                                         | Mapped to exit codes via `paladin-common` (never reclassified). |
+| `AescError`                                         | Mapped to exit codes via `aesc-common` (never reclassified). |
 
-### From `paladin-common`
+### From `aesc-common`
 
 | Item                                                       | Used by the CLI for                                              |
 | ---------------------------------------------------------- | ---------------------------------------------------------------- |
@@ -53,7 +53,7 @@ into these APIs. Verified against the current source.
 | `OutputSink::as_write()` / `OutputSink::commit()`          | Hand a `&mut dyn Write` to the core; finalize on success.        |
 | `best_effort_remove(path)`                                 | `--remove` after success.                                       |
 | `is_same_file(a, b)`                                       | (Already used inside `open_output`.)                            |
-| `exit_code(&PalError)` + `AppError::exit_code()` + `EXIT_*` | The single exit-code mapping.                                  |
+| `exit_code(&AescError)` + `AppError::exit_code()` + `EXIT_*` | The single exit-code mapping.                                  |
 | `AppError` / `AppResult` / `AppError::usage(msg)`          | The CLI's error currency before/around core calls.              |
 
 > **Cleanup-on-failure is automatic.** `OutputSink::File` holds a
@@ -64,15 +64,15 @@ into these APIs. Verified against the current source.
 
 ---
 
-## 2. Proposed module layout (`crates/paladin-cli/src`)
+## 2. Proposed module layout (`crates/aesc-cli/src`)
 
 Split the stub `main.rs` into small, testable modules. Pure logic (arg
 validation, options assembly, `--info` formatting) is unit-testable without
 spawning a process; end-to-end behavior is covered by `assert_cmd`.
 
 ```
-crates/paladin-cli/
-├── Cargo.toml            # add deps (§3); keep [[bin]] name = "paladin"
+crates/aesc-cli/
+├── Cargo.toml            # add deps (§3); keep [[bin]] name = "aesc"
 ├── src/
 │   ├── main.rs           # entry: parse → run → map AppError to process::exit
 │   ├── cli.rs            # clap `Cli` derive struct + Mode enum + raw flags
@@ -98,8 +98,8 @@ Per [DESIGN §9](DESIGN.md#9-dependencies). Versions resolved via `cargo add`
 
 | Crate                            | Why                                                            |
 | -------------------------------- | -------------------------------------------------------------- |
-| `paladin-core` (path)           | The four operations + helpers.                                |
-| `paladin-common` (path)         | Terminal glue + exit-code mapping.                            |
+| `aesc-core` (path)           | The four operations + helpers.                                |
+| `aesc-common` (path)         | Terminal glue + exit-code mapping.                            |
 | `clap` (features = `derive`)     | Argument parsing, `--help`, `--version`.                      |
 | `rpassword`                      | No-echo interactive password prompt.                         |
 | `indicatif`                      | Progress bar on stderr.                                       |
@@ -159,8 +159,8 @@ messages are precise and uniformly mapped to exit 2.
   the destination stream is a terminal and honors `NO_COLOR` /
   `CLICOLOR_FORCE`, so piped output stays free of escape codes.
 - `help_template` prefixes the help with `{name} {version}`, so `-h`/`--help`
-  (and the no-argument help) open with a `paladin <version>` line.
-- `arg_required_else_help = true`: a bare `paladin` invocation prints the
+  (and the no-argument help) open with a `aesc <version>` line.
+- `arg_required_else_help = true`: a bare `aesc` invocation prints the
   short help (the `-h` form) to **stderr** and exits **2** (usage error)
   instead of clap's terse missing-argument error. Partial-but-insufficient invocations (e.g. `-e`
   with no `<FILE>`) still get the normal specific error.
@@ -183,10 +183,10 @@ Each step writes failing tests first, then the code. Phases 1–9 build the bina
 phases).
 
 ### Step 1 — Crate wiring & skeleton
-- Add dependencies (§3); keep `[[bin]] name = "paladin"`.
+- Add dependencies (§3); keep `[[bin]] name = "aesc"`.
 - Replace the stub `main.rs` with the module skeleton (§2); `run::dispatch`
   returns `AppResult<()>`; `main` maps the error to a message + `exit_code()`.
-- **Test first:** `paladin --version` / `--help` succeed (exit 0) and `--help`
+- **Test first:** `aesc --version` / `--help` succeed (exit 0) and `--help`
   lists every flag in §6.3 (`assert_cmd` + `predicates`).
 
 ### Step 2 — Arg model
@@ -250,7 +250,7 @@ Reject, with `AppError::usage` (exit 2), before any work:
   `Err`, return it (temp file auto-drops; no `--remove`).
 - **`--remove`:** only after `commit()` succeeds — `best_effort_remove(input)`;
   on failure print a stderr warning and still exit 0.
-- **Test first:** default extensions (encrypt `.paladin`/`.paladin.asc`);
+- **Test first:** default extensions (encrypt `.aesc`/`.aesc.asc`);
   decrypt name from header vs extension-strip vs `.dec`; required `-o` for stdin
   enc/dec; `--remove` rejected with stdin; output-equals-input refusal
   (incl. symlink/hardlink where supported); `0600` temp mode on Unix; temp-file
@@ -265,7 +265,7 @@ Reject, with `AppError::usage` (exit 2), before any work:
   `ControlFlow::Break` if the shared cancel flag (`Arc<AtomicBool>`) is set.
 - Install a SIGINT handler (`ctrlc`) once in `main` that sets the cancel flag.
   The core observes it before/after KDF and between chunks, returns
-  `PalError::Canceled` ⇒ exit 130; the unfinalized temp output drops away.
+  `AescError::Canceled` ⇒ exit 130; the unfinalized temp output drops away.
 - **Test first:** `--progress` with `--quiet` already rejected (step 3);
   `--no-progress` produces no bar; quiet suppresses progress but not `--info`
   stdout or errors. (SIGINT timing is covered manually + a core-level cancel
@@ -315,8 +315,8 @@ Confirms every §6 rule has a home and is not duplicated.
 | Temp-file finalize; `0600`; cleanup on failure            | `common::OutputSink` (drop/commit)           |
 | Stdin requires `-o`; `--remove` rejected with stdin       | `validate.rs` / `run.rs`                     |
 | `--remove` warns-but-exits-0 on delete failure            | `run.rs` + `common::best_effort_remove`      |
-| Size cap, tamper, truncation                              | `paladin-core` (CLI just maps the error)    |
-| Exit-code mapping (`PalError` → 0/1/2/3/4/130)            | `common::exit_code` / `AppError::exit_code`  |
+| Size cap, tamper, truncation                              | `aesc-core` (CLI just maps the error)    |
+| Exit-code mapping (`AescError` → 0/1/2/3/4/130)            | `common::exit_code` / `AppError::exit_code`  |
 | SIGINT ⇒ cancel flag ⇒ `Canceled` ⇒ 130                   | `progress.rs` + `main` (`ctrlc`)             |
 
 ---
@@ -327,7 +327,7 @@ Stable UTF-8 `key: value` lines to **stdout**, in this exact order; not
 suppressed by `--quiet`. Values come from core display helpers / the `Header`.
 
 ```
-format: paladin
+format: aesc
 version: <decimal>
 cipher: <lowercase name>
 kdf: <lowercase name>
@@ -353,9 +353,10 @@ auto-detected by `inspect`. No password is read in this mode.
 From [DESIGN §10](DESIGN.md#10-testing-strategy). One test (or a small table)
 per item:
 
-- Default extensions: encrypt → `.paladin` / `.paladin.asc`.
-- Decrypt default output: stored name; extension-strip; `.dec` fallback;
-  empty-basename fallback (`.paladin` → `.paladin.dec`).
+- Default extensions: encrypt → `.aesc` / `.aesc.asc`.
+- Decrypt default output: stored name; extension-strip (including the legacy
+  `.paladin` / `.paladin.asc` suffixes, §6.5); `.dec` fallback;
+  empty-basename fallback (`.aesc` → `.aesc.dec`).
 - Required `-o` for stdin encrypt/decrypt; `--remove` rejected with stdin.
 - `--remove` warning-but-success when deletion fails after a good output.
 - Output-equals-input refusal; symlink-resolved and hardlink same-file refusal
@@ -377,13 +378,13 @@ per item:
 - Exact lowercase cipher/KDF parsing; alias/case rejection.
 - Non-UTF-8 OS-native path handling where the platform supports it.
 - Password bytes via file/env/`--no-password` produce a decryptable file.
-- `--help` opens with `paladin <version>`; a bare invocation prints the help
+- `--help` opens with `aesc <version>`; a bare invocation prints the help
   (including the version line) to stderr and exits 2.
 - Forced color (`CLICOLOR_FORCE=1`) emits ANSI color codes in `--help` and in
   the bare-invocation help; piped output without forcing contains none.
 
 After code changes: `cargo fmt`, `cargo clippy --all-targets --all-features`
-(no warnings), `cargo test -p paladin-cli`.
+(no warnings), `cargo test -p aesc-cli`.
 
 ---
 
@@ -391,9 +392,9 @@ After code changes: `cargo fmt`, `cargo clippy --all-targets --all-features`
 
 - **`--help`:** mark `-p/--password` discouraged (§11); state `--remove` is a
   plain delete (no secure erase); note armor recommended when stdout is a TTY.
-- **Man page:** `paladin(1)` mirroring §6 (consider generating from clap).
-- **`cargo install`:** `cargo install --path crates/paladin-cli` installs the
-  `paladin` binary; document in the README once it builds.
+- **Man page:** `aesc(1)` mirroring §6 (consider generating from clap).
+- **`cargo install`:** `cargo install --path crates/aesc-cli` installs the
+  `aesc` binary; document in the README once it builds.
 - Update the README's CLI usage/examples to match §6.7 once implemented.
 
 ---
@@ -414,7 +415,7 @@ After code changes: `cargo fmt`, `cargo clippy --all-targets --all-features`
   stderr diagnostics (§4); it is no longer left unspecified.
 - **TTY detection** uses std `IsTerminal` (Rust ≥ 1.70; workspace is 1.94) — no
   extra crate.
-- Everything else is fully determined by `paladin-core` + `paladin-common`,
+- Everything else is fully determined by `aesc-core` + `aesc-common`,
   which are already implemented and tested.
 
 ---
@@ -431,6 +432,6 @@ After code changes: `cargo fmt`, `cargo clippy --all-targets --all-features`
 - [x] **Step 8** — encrypt / decrypt / verify handlers wired to core.
 - [x] **Step 9** — `info.rs` exact stable `--info` output.
 - [x] **Step 10** — `assert_cmd` integration suite (§8); `fmt` + `clippy` clean.
-- [x] **Step 11** — `--help` text, `paladin(1)` man page, `cargo install`, README CLI section.
+- [x] **Step 11** — `--help` text, `aesc(1)` man page, `cargo install`, README CLI section.
 - [x] DESIGN §9 updated: add `ctrlc` (cli); add `cli` to `zeroize`; drop `cli` from `anyhow`.
 - [x] Colored help/usage (cargo palette), version-led help, bare-invocation help → stderr + exit 2.

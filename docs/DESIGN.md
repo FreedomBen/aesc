@@ -1,13 +1,13 @@
-# paladin — Design
+# aesc — Design
 
-**Status:** Core libraries (`paladin-core`, `paladin-common`) implemented and tested; front-end binaries (CLI/TUI/GTK) are scaffold stubs pending build-out.
+**Status:** Core libraries (`aesc-core`, `aesc-common`) and all three front-ends (CLI/TUI/GTK) implemented and tested. Renamed from **paladin** to **aesc** (§14) with the on-disk format unchanged.
 **Target stack:** Rust 1.94+, [relm4](https://relm4.org/) (gtk4-rs + libadwaita), [ratatui](https://ratatui.rs/).
-**Last updated:** 2026-05-29
+**Last updated:** 2026-10-11
 
-`paladin` is a simple, safe symmetric file encryption tool. It ships as three
+`aesc` is a simple, safe symmetric file encryption tool. It ships as three
 **thin front-ends over one shared core library** — a scriptable CLI
-(`paladin`), an interactive terminal UI (`paladin-tui`), and a GTK desktop app
-(`paladin-gtk`, built with relm4) — all built on `paladin-core`, which does all
+(`aesc`), an interactive terminal UI (`aesc-tui`), and a GTK desktop app
+(`aesc-gtk`, built with relm4) — all built on `aesc-core`, which does all
 the work. The default cipher is AES-256-GCM. Encrypted files begin with a
 self-describing, authenticated header so they can be identified and decrypted
 without out-of-band parameters (other than the password/keyfile).
@@ -54,7 +54,7 @@ without out-of-band parameters (other than the password/keyfile).
 ### Non-goals (v1)
 
 - Public-key / asymmetric encryption, signing, or key exchange.
-- Hiding *that* a file is a paladin file (the magic is intentionally
+- Hiding *that* a file is an aesc file (the magic is intentionally
   identifiable) or hiding the approximate plaintext size.
 - Deniable encryption, hidden volumes, or secure erasure guarantees on modern
   storage (see [§11](#11-security-considerations)).
@@ -65,10 +65,10 @@ without out-of-band parameters (other than the password/keyfile).
 
 ## 2. Architecture
 
-A Cargo **workspace** of five crates: the pure-logic `paladin-core`, the three
-thin front-ends (`paladin`, `paladin-tui`, `paladin-gtk`), and
-`paladin-common` — a small support crate of terminal glue shared by the CLI and
-TUI. **`paladin-core` does all the work**; the front-ends are just views that
+A Cargo **workspace** of five crates: the pure-logic `aesc-core`, the three
+thin front-ends (`aesc`, `aesc-tui`, `aesc-gtk`), and
+`aesc-common` — a small support crate of terminal glue shared by the CLI and
+TUI. **`aesc-core` does all the work**; the front-ends are just views that
 gather input, hand it to the core, and render the result. This keeps the
 security-critical code small, front-end-agnostic, and unit-testable, and
 guarantees the CLI, TUI, and GTK app behave identically because they share the
@@ -77,7 +77,7 @@ same code path.
 ### 2.1 Workspace layout
 
 ```
-paladin/
+aesc/
 ├── Cargo.toml                 # workspace manifest
 ├── README.md
 ├── docs/
@@ -88,28 +88,28 @@ paladin/
 │   ├── IMPLEMENTATION_PLAN_04_GTK.md
 │   └── IMPLEMENTATION_PLAN_05_AESCRYPT.md  # AES Crypt read interop
 └── crates/
-    ├── paladin-core/         # library — ALL crypto, format, streaming, pure helpers
+    ├── aesc-core/         # library — ALL crypto, format, streaming, pure helpers
     │   ├── src/
     │   │   ├── lib.rs          # public API: encrypt / decrypt / inspect / verify
-    │   │   ├── error.rs        # PalError, Result
+    │   │   ├── error.rs        # AescError, Result
     │   │   ├── secret.rs       # Secret (password + optional keyfile), zeroized
     │   │   ├── header.rs       # serialize / parse, IDs, flags, params
     │   │   ├── kdf.rs          # Argon2id / scrypt / PBKDF2 dispatch + defaults
     │   │   ├── cipher.rs       # AEAD dispatch (AES-256-GCM, ChaCha20-Poly1305)
     │   │   ├── stream.rs       # STREAM chunked encrypt / decrypt
     │   │   ├── armor.rs        # base64 ASCII-armor wrap / unwrap + detect
-    │   │   ├── format.rs       # peek magic; dispatch paladin vs AES Crypt
+    │   │   ├── format.rs       # peek magic; dispatch aesc vs AES Crypt
     │   │   ├── aescrypt.rs     # AES Crypt (.aes) read interop: KDF, CBC+HMAC, inspect
     │   │   └── paths.rs        # default output-path helpers (pure, no I/O)
     │   └── tests/              # round-trip, tamper, KAT vectors
-    ├── paladin-common/        # library — terminal glue shared by CLI + TUI
+    ├── aesc-common/        # library — terminal glue shared by CLI + TUI
     │   └── src/lib.rs          # path-or-stdin I/O, clobber check, temp-file finalization,
     │                           #   best-effort remove, password-source resolution, exit-code mapping
-    ├── paladin-cli/           # binary `paladin`      (thin front-end)
+    ├── aesc-cli/           # binary `aesc`      (thin front-end)
     │   └── src/main.rs
-    ├── paladin-tui/           # binary `paladin-tui`  (thin front-end, ratatui)
+    ├── aesc-tui/           # binary `aesc-tui`  (thin front-end, ratatui)
     │   └── src/main.rs
-    └── paladin-gtk/           # binary `paladin-gtk`  (thin front-end, relm4 + libadwaita)
+    └── aesc-gtk/           # binary `aesc-gtk`  (thin front-end, relm4 + libadwaita)
         └── src/main.rs
 ```
 
@@ -119,27 +119,27 @@ Front-ends own only *medium-specific* concerns — capturing input and rendering
 output. Everything else lives in the core, including pure helpers (output-path
 derivation, cipher/KDF name parsing, defaults) so even those are written once.
 
-| Concern                                                   | `paladin-core` | Front-ends |
-|-----------------------------------------------------------|:---------------:|:----------:|
-| AEAD, KDF, RNG, key derivation                            | ✓               |            |
-| File format: header, chunk framing, armor                 | ✓               |            |
-| Streaming loop, nonce derivation, tamper/auth checks      | ✓               |            |
-| `Secret` assembly (password + keyfile) and zeroization    | ✓               |            |
-| Default output-path / extension logic                     | ✓ (pure helper) | call it    |
-| Cipher/KDF name parsing, display, and default params      | ✓               | call it    |
-| Unauthenticated header inspection for `--info`            | ✓               | call it    |
-| Parsing args / drawing widgets / reading keypresses       |                 | ✓          |
-| Acquiring the password (prompt / file / env / entry)      |                 | ✓          |
-| Opening files or stdin/stdout, the clobber *decision*, `--remove` |         | ✓          |
-| Rendering progress, formatting errors, exit codes         |                 | ✓          |
+| Concern                                                           | `aesc-core`     | Front-ends |
+|-------------------------------------------------------------------|:---------------:|:----------:|
+| AEAD, KDF, RNG, key derivation                                    | ✓               |            |
+| File format: header, chunk framing, armor                         | ✓               |            |
+| Streaming loop, nonce derivation, tamper/auth checks              | ✓               |            |
+| `Secret` assembly (password + keyfile) and zeroization            | ✓               |            |
+| Default output-path / extension logic                             | ✓ (pure helper) | call it    |
+| Cipher/KDF name parsing, display, and default params              | ✓               | call it    |
+| Unauthenticated header inspection for `--info`                    | ✓               | call it    |
+| Parsing args / drawing widgets / reading keypresses               |                 | ✓          |
+| Acquiring the password (prompt / file / env / entry)              |                 | ✓          |
+| Opening files or stdin/stdout, the clobber *decision*, `--remove` |                 | ✓          |
+| Rendering progress, formatting errors, exit codes                 |                 | ✓          |
 
 The core never reads argv, never prompts, never touches the filesystem on its
 own, never decides whether to overwrite, and never exits the process. It takes
 generic `Read`/`Write` and reports progress through a callback. The terminal glue
-shared by `paladin` and `paladin-tui` (open-path-or-stdin, clobber check,
+shared by `aesc` and `aesc-tui` (open-path-or-stdin, clobber check,
 temp-file finalization, best-effort remove, password-source resolution,
 exit-code mapping) lives in the
-`paladin-common` crate so it is written once. `paladin-gtk` does not use it —
+`aesc-common` crate so it is written once. `aesc-gtk` does not use it —
 it relies on the core plus GTK-native file handling.
 
 For file outputs, front-ends write to a sibling temporary file and rename it to
@@ -186,11 +186,11 @@ impl Default for EncryptOptions { /* secure defaults from §12 */ }
 /// `input_len` is advisory for progress only; the §4.3 size cap is enforced
 /// from the bytes actually streamed (input plaintext on encrypt, authenticated
 /// plaintext on decrypt/verify), so a wrong hint never affects safety.
-/// Returning Break aborts with PalError::Canceled.
+/// Returning Break aborts with AescError::Canceled.
 pub struct Progress { pub done: u64, pub total: Option<u64> }
 type OnProgress = dyn FnMut(Progress) -> std::ops::ControlFlow<()>;
 
-/// Parsed paladin header metadata. Exposes the §5.2/§5.4 wire fields — cipher,
+/// Parsed aesc header metadata. Exposes the §5.2/§5.4 wire fields — cipher,
 /// kdf, kdf_params, decoded flags (filename-present and the `keyfile_hint`),
 /// chunk_size, salt_len, nonce_prefix_len — plus the stored name and a
 /// `name_status` (absent / present / ignored_unsafe; see §6.2). It carries no
@@ -204,7 +204,7 @@ pub struct AesCryptHeader { /* … */ }
 
 /// What `inspect` recognized. `decrypt`/`verify` keep identical signatures and
 /// dispatch internally; only `inspect` widens to describe two formats (§5.8).
-pub enum Metadata { Paladin(Header), AesCrypt(AesCryptHeader) }
+pub enum Metadata { Aesc(Header), AesCrypt(AesCryptHeader) }
 
 // ---- The four operations every front-end calls ----
 
@@ -234,8 +234,9 @@ pub fn is_armored(prefix: &[u8]) -> bool;                  // §5.6 begin-marker
 ```
 
 `decrypt`, `verify`, and `inspect` auto-detect the container format after armor
-is stripped: a paladin magic takes the native path, an `AES` magic takes the
-AES Crypt read path (§5.8). Encryption always writes paladin's own format.
+is stripped: a `PALADIN` magic (§5.2) takes the native path, an `AES` magic
+takes the AES Crypt read path (§5.8). Encryption always writes aesc's own
+format.
 
 ### 2.4 Data flow
 
@@ -268,7 +269,7 @@ option). Truncation, reordering, and bit-flips of the ciphertext must be detecte
 
 **Out of scope.** A compromised host while the tool runs (malware, keyloggers,
 swap/coredump capture), an attacker who knows the password or keyfile, coercion,
-traffic analysis of file size, and the fact that the file *is* a paladin file.
+traffic analysis of file size, and the fact that the file *is* an aesc file.
 Secure deletion of the original plaintext is best-effort only.
 
 ---
@@ -277,15 +278,15 @@ Secure deletion of the original plaintext is best-effort only.
 
 ### 4.1 Primitives
 
-| Role            | Choice (default first)                                  |
-|-----------------|---------------------------------------------------------|
-| AEAD cipher     | **AES-256-GCM**, or ChaCha20-Poly1305                   |
-| Key size        | 256-bit (32 bytes) for both ciphers                     |
-| Auth tag        | 128-bit (16 bytes)                                      |
-| Nonce           | 96-bit (12 bytes), constructed per chunk (see §4.3)     |
-| KDF             | **Argon2id**, or scrypt, or PBKDF2-HMAC-SHA256          |
-| CSPRNG          | OS RNG (`getrandom` / `OsRng`) for salt + nonce prefix  |
-| Secret wiping   | `zeroize` on all key material and derived buffers       |
+| Role          | Choice (default first)                                 |
+|---------------|--------------------------------------------------------|
+| AEAD cipher   | **AES-256-GCM**, or ChaCha20-Poly1305                  |
+| Key size      | 256-bit (32 bytes) for both ciphers                    |
+| Auth tag      | 128-bit (16 bytes)                                     |
+| Nonce         | 96-bit (12 bytes), constructed per chunk (see §4.3)    |
+| KDF           | **Argon2id**, or scrypt, or PBKDF2-HMAC-SHA256         |
+| CSPRNG        | OS RNG (`getrandom` / `OsRng`) for salt + nonce prefix |
+| Secret wiping | `zeroize` on all key material and derived buffers      |
 
 AEAD, KDF, and hash primitives come from the
 [RustCrypto](https://github.com/RustCrypto) project (pure-Rust, widely
@@ -302,7 +303,9 @@ key (32 bytes) = KDF(secret_input, salt, params)
 - `secret_input` is a domain-separated, length-prefixed encoding:
   `b"paladin secret v1\0" || u64be(password_len) || password_bytes ||
   u64be(keyfile_len) || keyfile_bytes`, where `u64be` is an unsigned 64-bit
-  big-endian length. This avoids ambiguity between passwords and keyfile
+  big-endian length. The domain tag keeps the original "paladin" project name:
+  it is baked into every v1 file's key derivation, so it survives the rename to
+  aesc unchanged (§14). This avoids ambiguity between passwords and keyfile
   contents. Each part may be empty, but not both; creating a `Secret` with no
   password bytes and no keyfile bytes is an error.
 - `params` are stored in the header so decrypt re-derives the identical key.
@@ -351,17 +354,17 @@ nonce[11]     = final_flag     # 0x00 for normal chunks, 0x01 for the last chunk
 - **Counter overflow:** refuse to encrypt a stream needing more than 2³² chunks
   (≈ 256 TiB at 64 KiB), which is far beyond practical inputs. On decrypt the
   counter is advanced with checked arithmetic; a stream that would exceed 2³²
-  chunks is rejected as an authentication failure (`PalError::Auth`, exit 3)
+  chunks is rejected as an authentication failure (`AescError::Auth`, exit 3)
   rather than wrapping the counter.
 - **v1 file-size cap:** refuse to encrypt, decrypt, or verify plaintext larger
   than 64 GiB. This is comfortably below the nonce counter limit and keeps
   AES-GCM usage within a conservative per-key data bound. The cap is enforced
   from streamed plaintext bytes, not from the caller's advisory `input_len`.
   Exceeding either the chunk-count or file-size limit while encrypting is
-  reported as `PalError::InputTooLarge` (exit 1), detected during streaming and
+  reported as `AescError::InputTooLarge` (exit 1), detected during streaming and
   before any file output is finalized. During decrypt/verify, an authenticated
   plaintext stream that would exceed 64 GiB is also rejected as
-  `PalError::InputTooLarge`; file outputs are removed, while stdout may already
+  `AescError::InputTooLarge`; file outputs are removed, while stdout may already
   contain plaintext written before the cap was reached. Larger-file support can
   later use explicit segment keys or another reviewed construction.
 
@@ -392,28 +395,34 @@ authenticated via AAD during decrypt/verify.
 
 ### 5.2 Header fields
 
-| Offset            | Size               | Field              | Notes                                             |
-|-------------------|--------------------|--------------------|---------------------------------------------------|
-| 0                 | 8                  | `magic`            | ASCII `"PALADIN"` + trailing `0x00` pad           |
-| 8                 | 1                  | `version`          | `0x01`                                            |
-| 9                 | 1                  | `cipher_id`        | `0x01` AES-256-GCM · `0x02` ChaCha20-Poly1305     |
-| 10                | 1                  | `kdf_id`           | `0x01` Argon2id · `0x02` scrypt · `0x03` PBKDF2   |
-| 11                | 1                  | `flags`            | bit0 filename-present · bit1 keyfile-used (hint)  |
-| 12                | 4                  | `kdf_p1`           | u32, meaning per KDF (§5.4)                       |
-| 16                | 4                  | `kdf_p2`           | u32                                               |
-| 20                | 4                  | `kdf_p3`           | u32                                               |
-| 24                | 1                  | `salt_len`         | bytes (default 16)                                |
-| 25                | `salt_len`         | `salt`             | random                                            |
-| 25+`salt_len`     | 1                  | `nonce_prefix_len` | bytes (exactly 7 in v1)                           |
-| 26+`salt_len`     | `nonce_prefix_len` | `nonce_prefix`     | random                                            |
-| …                 | 4                  | `chunk_size`       | u32, plaintext bytes per chunk (default 65536)    |
-| … (if flags bit0) | 2                  | `name_len`         | u16, 1..=255                                      |
+| Offset            | Size               | Field              | Notes                                              |
+|-------------------|--------------------|--------------------|----------------------------------------------------|
+| 0                 | 8                  | `magic`            | ASCII `"PALADIN"` + trailing `0x00` pad            |
+| 8                 | 1                  | `version`          | `0x01`                                             |
+| 9                 | 1                  | `cipher_id`        | `0x01` AES-256-GCM · `0x02` ChaCha20-Poly1305      |
+| 10                | 1                  | `kdf_id`           | `0x01` Argon2id · `0x02` scrypt · `0x03` PBKDF2    |
+| 11                | 1                  | `flags`            | bit0 filename-present · bit1 keyfile-used (hint)   |
+| 12                | 4                  | `kdf_p1`           | u32, meaning per KDF (§5.4)                        |
+| 16                | 4                  | `kdf_p2`           | u32                                                |
+| 20                | 4                  | `kdf_p3`           | u32                                                |
+| 24                | 1                  | `salt_len`         | bytes (default 16)                                 |
+| 25                | `salt_len`         | `salt`             | random                                             |
+| 25+`salt_len`     | 1                  | `nonce_prefix_len` | bytes (exactly 7 in v1)                            |
+| 26+`salt_len`     | `nonce_prefix_len` | `nonce_prefix`     | random                                             |
+| …                 | 4                  | `chunk_size`       | u32, plaintext bytes per chunk (default 65536)     |
+| … (if flags bit0) | 2                  | `name_len`         | u16, 1..=255                                       |
 | …                 | `name_len`         | `name`             | UTF-8 **basename only** (path components stripped) |
 
 The "serialized header" used as AAD spans `magic` through the end of the
 optional `name` field, i.e. everything before the body. `name_len` is a `u16`
 even though v1 caps names at 255 bytes; the wider field reserves headroom to
 raise the limit in a future version without changing the layout.
+
+The magic keeps the ASCII `"PALADIN"` identifier from the project's original
+name: it is part of the v1 format, so changing it would orphan every existing
+file. The application rename to aesc (§14) deliberately left the on-disk format
+— magic, armor markers (§5.6), and KDF domain tag (§4.2) — byte-identical;
+only the default output *filename* extension changed (§6.5).
 
 When the filename flag is present, `name` is a display/output hint only — never
 trusted as a path. A well-formed `name` is a single UTF-8 basename of 1..=255
@@ -466,25 +475,25 @@ retained for forward compatibility and for tests that exercise multi-chunk
 streams on small inputs. `core::encrypt` validates `EncryptOptions` before
 writing any output: `kdf_params` must match `kdf`, `chunk_size` must be in
 range, and any `filename` must satisfy the basename rules from §5.2. Invalid
-programmatic options return `PalError::InvalidOptions` (exit 2), so a
+programmatic options return `AescError::InvalidOptions` (exit 2), so a
 programmatically constructed `EncryptOptions` (for example in tests) cannot
 produce a file that fails its own read validation.
 
-| Parameter            | Valid range / rule                                      |
-|----------------------|---------------------------------------------------------|
-| `salt_len`           | 16..=64 bytes; v1 encryption writes 16.                 |
-| `nonce_prefix_len`   | Exactly 7 bytes in v1.                                  |
-| `chunk_size`         | 4096..=16777216 bytes (4 KiB..=16 MiB).                 |
-| `name_len`           | 1..=255 bytes when the filename flag is set.            |
-| Argon2id memory      | 8192..=1048576 KiB (8 MiB..=1 GiB).                     |
-| Argon2id time        | 1..=10 passes.                                          |
-| Argon2id parallelism | 1..=16 lanes.                                           |
-| scrypt `log₂(N)`     | 10..=20, and `N = 2^log₂(N)`.                           |
-| scrypt `r`           | 1..=32.                                                 |
-| scrypt `p`           | 1..=16.                                                 |
-| scrypt memory cap    | `128 * N * r` must be <= 1 GiB.                         |
-| PBKDF2 iterations    | 10000..=10000000.                                       |
-| PBKDF2 reserved      | `kdf_p2 == 0` and `kdf_p3 == 0`.                        |
+| Parameter            | Valid range / rule                           |
+|----------------------|----------------------------------------------|
+| `salt_len`           | 16..=64 bytes; v1 encryption writes 16.      |
+| `nonce_prefix_len`   | Exactly 7 bytes in v1.                       |
+| `chunk_size`         | 4096..=16777216 bytes (4 KiB..=16 MiB).      |
+| `name_len`           | 1..=255 bytes when the filename flag is set. |
+| Argon2id memory      | 8192..=1048576 KiB (8 MiB..=1 GiB).          |
+| Argon2id time        | 1..=10 passes.                               |
+| Argon2id parallelism | 1..=16 lanes.                                |
+| scrypt `log₂(N)`     | 10..=20, and `N = 2^log₂(N)`.                |
+| scrypt `r`           | 1..=32.                                      |
+| scrypt `p`           | 1..=16.                                      |
+| scrypt memory cap    | `128 * N * r` must be <= 1 GiB.              |
+| PBKDF2 iterations    | 10000..=10000000.                            |
+| PBKDF2 reserved      | `kdf_p2 == 0` and `kdf_p3 == 0`.             |
 
 ### 5.5 Body / chunk layout
 
@@ -533,13 +542,16 @@ endings and surrounding whitespace, but require the exact begin/end marker
 lines once armor is detected. Extra non-whitespace outside the markers,
 non-base64 body content, or a missing end marker is malformed armor
 (`MalformedHeader`, exit 4). Armor is purely an outer transport encoding; it is
-not represented in the binary header.
+not represented in the binary header. Like the magic (§5.2), the
+`PALADIN MESSAGE` marker text is part of the v1 format and survives the rename
+to aesc unchanged, so armored files remain interchangeable with pre-rename
+builds.
 
 ### 5.7 Versioning & forward compatibility
 
 The magic is checked first, then the `version` byte. An unknown `version`,
 `cipher_id`, or `kdf_id`, or any reserved `flags` bit set, is rejected with a
-clear error (exit code 4) — paladin never guesses at an unrecognized format.
+clear error (exit code 4) — aesc never guesses at an unrecognized format.
 New ciphers or KDFs take new IDs (with a version bump if the layout changes).
 Because every file stores its own KDF parameters, files remain decryptable as
 the *defaults* for new files evolve over time.
@@ -550,9 +562,9 @@ As an interoperability convenience, `decrypt`, `verify`, and `inspect` also read
 foreign [AES Crypt](https://www.aescrypt.com/) (`.aes`) files. Detection is
 automatic: after armor is stripped, a leading `AES` magic takes the AES Crypt
 path and a `PALADIN` magic takes the native path. **Encryption never writes
-AES Crypt** — paladin only ever emits its own container (§5.1). This is read
+AES Crypt** — aesc only ever emits its own container (§5.1). This is read
 interop, not an endorsement of the legacy format; the recommended migration is
-to decrypt a `.aes` file and re-encrypt it with paladin.
+to decrypt a `.aes` file and re-encrypt it with aesc.
 
 **Supported versions: Stream Format 1 and 2.** Stream Format 3
 (PBKDF2-HMAC-SHA512) is **not yet implemented** — its PBKDF2 salt is not stated
@@ -580,7 +592,7 @@ input is bounded: extensions are capped (256 KiB total, 1024 count), the body
 streams with bounded memory, and the §4.3 64 GiB plaintext cap applies. A failed
 HMAC, a truncated/appended body, or a ciphertext run that is not a multiple of
 16 are all the single `Auth` condition (§4.4), never distinguished from a wrong
-password. AES Crypt has no paladin-style keyfile component, so a keyfile-bearing
+password. AES Crypt has no aesc-style keyfile component, so a keyfile-bearing
 or password-less secret against a `.aes` file is a usage error (§6.6); an AES
 Crypt key file may instead be supplied as a UTF-8 `--password-file` (§6.4).
 
@@ -588,8 +600,8 @@ Crypt key file may instead be supplied as a UTF-8 `--password-file` (§6.4).
 
 ## 6. CLI specification
 
-`paladin` is the command-line front-end: a thin wrapper that parses arguments,
-resolves the password, opens streams, calls `paladin-core`, and maps results to
+`aesc` is the command-line front-end: a thin wrapper that parses arguments,
+resolves the password, opens streams, calls `aesc-core`, and maps results to
 exit codes. It contains no crypto or format logic. The flags below are also the
 shared vocabulary the TUI and GTK app expose through their own controls where
 applicable — cipher and KDF names, defaults, and output-path rules all come from
@@ -600,33 +612,33 @@ environment variables.
 ### 6.1 Synopsis
 
 ```
-paladin (-e|--encrypt | -d|--decrypt | -i|--info | --verify) <FILE> [options]
+aesc (-e|--encrypt | -d|--decrypt | -i|--info | --verify) <FILE> [options]
 ```
 
 Except for `-h/--help` and `-V/--version`, exactly one mode and one `<FILE>` are
 required. `<FILE>` of `-` means **stdin**.
 
-Invoked with no arguments at all, `paladin` prints its short help text (the
+Invoked with no arguments at all, `aesc` prints its short help text (the
 `-h` form) to **stderr** and exits **2** (usage error) instead of emitting a
 terse missing-argument message. Both `-h/--help` and this no-argument help open with a
-`paladin <version>` line. Help, usage, and error output are colorized only when
+`aesc <version>` line. Help, usage, and error output are colorized only when
 the destination stream is a terminal — clap's runtime detection, which honors
 `NO_COLOR` and `CLICOLOR_FORCE` — so piped or redirected output carries no
 escape codes.
 
 ### 6.2 Modes
 
-| Mode             | Action                                                            |
-|------------------|-------------------------------------------------------------------|
-| `-e, --encrypt`  | Encrypt `<FILE>` → output. Always paladin's own format.          |
-| `-d, --decrypt`  | Decrypt `<FILE>` → output. A paladin or AES Crypt (`.aes`) container is auto-detected (§5.8). |
-| `-i, --info`     | Print unauthenticated header metadata without decrypting (paladin or AES Crypt). No password needed. |
-| `--verify`       | Stream-decrypt and discard the output (nothing written) to verify integrity + password (paladin or AES Crypt). Exit 0 if valid. |
+| Mode            | Action                                                                                                                       |
+|-----------------|------------------------------------------------------------------------------------------------------------------------------|
+| `-e, --encrypt` | Encrypt `<FILE>` → output. Always aesc's own format.                                                                         |
+| `-d, --decrypt` | Decrypt `<FILE>` → output. An aesc or AES Crypt (`.aes`) container is auto-detected (§5.8).                                  |
+| `-i, --info`    | Print unauthenticated header metadata without decrypting (aesc or AES Crypt). No password needed.                            |
+| `--verify`      | Stream-decrypt and discard the output (nothing written) to verify integrity + password (aesc or AES Crypt). Exit 0 if valid. |
 
 `--info` writes stable UTF-8 `key: value` lines to stdout in this exact order:
 `format`, `version`, `cipher`, `kdf`, `kdf_params`, `flags`, `keyfile_hint`,
 `chunk_size`, `salt_len`, `nonce_prefix_len`, `name_status`, and `name`. Values
-are display forms from the shared core helpers: `format: paladin`, decimal
+are display forms from the shared core helpers: `format: aesc`, decimal
 numeric values, lowercase cipher/KDF names, `flags` as two-digit lowercase hex
 (`0x00`), and `keyfile_hint: true|false`. `kdf_params` is
 `memory=<KiB>,time=<N>,parallelism=<N>` for Argon2id, `log_n=<N>,r=<N>,p=<N>`
@@ -645,32 +657,32 @@ the file's raw value without enforcing the decrypt-time bound.
 
 ### 6.3 Options
 
-| Flag                       | Applies to     | Description                                                           |
-|----------------------------|----------------|-----------------------------------------------------------------------|
-| `-o, --output <FILE>`      | enc/dec        | Output path; `-` = stdout. Defaults in §6.5.                          |
-| `-p, --password <PW>`      | enc/dec/verify | Password inline (**discouraged**, see §11).                           |
-| `--password-file <FILE>`   | enc/dec/verify | Read password from a file (trailing newline trimmed).                 |
-| `--password-env <VAR>`     | enc/dec/verify | Read password from an environment variable.                           |
-| `--no-password`            | enc/dec/verify | Use an empty password; valid only with `-k`.                          |
-| `-k, --keyfile <FILE>`     | enc/dec/verify | Keyfile material combined with the password source.                   |
-| `-c, --cipher <NAME>`      | encrypt        | `aes-256-gcm` (default) or `chacha20-poly1305`.                       |
-| `--kdf <NAME>`             | encrypt        | `argon2id` (default), `scrypt`, or `pbkdf2`.                          |
-| `--argon2-memory <KiB>`    | encrypt        | Argon2id memory cost.                                                 |
-| `--argon2-time <N>`        | encrypt        | Argon2id passes.                                                      |
-| `--argon2-parallelism <N>` | encrypt        | Argon2id lanes.                                                       |
-| `--scrypt-log-n <N>`       | encrypt        | scrypt log₂(N).                                                       |
-| `--scrypt-r <N>`           | encrypt        | scrypt block-size parameter `r`.                                      |
-| `--scrypt-p <N>`           | encrypt        | scrypt parallelization parameter `p`.                                 |
-| `--pbkdf2-iterations <N>`  | encrypt        | PBKDF2-HMAC-SHA256 iteration count.                                   |
-| `-a, --armor`              | encrypt        | ASCII-armored (base64) output. (Decrypt/verify/info auto-detect.)     |
+| Flag                       | Applies to     | Description                                                             |
+|----------------------------|----------------|-------------------------------------------------------------------------|
+| `-o, --output <FILE>`      | enc/dec        | Output path; `-` = stdout. Defaults in §6.5.                            |
+| `-p, --password <PW>`      | enc/dec/verify | Password inline (**discouraged**, see §11).                             |
+| `--password-file <FILE>`   | enc/dec/verify | Read password from a file (trailing newline trimmed).                   |
+| `--password-env <VAR>`     | enc/dec/verify | Read password from an environment variable.                             |
+| `--no-password`            | enc/dec/verify | Use an empty password; valid only with `-k`.                            |
+| `-k, --keyfile <FILE>`     | enc/dec/verify | Keyfile material combined with the password source.                     |
+| `-c, --cipher <NAME>`      | encrypt        | `aes-256-gcm` (default) or `chacha20-poly1305`.                         |
+| `--kdf <NAME>`             | encrypt        | `argon2id` (default), `scrypt`, or `pbkdf2`.                            |
+| `--argon2-memory <KiB>`    | encrypt        | Argon2id memory cost.                                                   |
+| `--argon2-time <N>`        | encrypt        | Argon2id passes.                                                        |
+| `--argon2-parallelism <N>` | encrypt        | Argon2id lanes.                                                         |
+| `--scrypt-log-n <N>`       | encrypt        | scrypt log₂(N).                                                         |
+| `--scrypt-r <N>`           | encrypt        | scrypt block-size parameter `r`.                                        |
+| `--scrypt-p <N>`           | encrypt        | scrypt parallelization parameter `p`.                                   |
+| `--pbkdf2-iterations <N>`  | encrypt        | PBKDF2-HMAC-SHA256 iteration count.                                     |
+| `-a, --armor`              | encrypt        | ASCII-armored (base64) output. (Decrypt/verify/info auto-detect.)       |
 | `--name`                   | encrypt        | Store the input's basename; boolean switch, off by default (sensitive). |
-| `-f, --force`              | enc/dec        | Overwrite an existing output file (default: refuse).                  |
-| `--remove`                 | enc/dec        | Best-effort delete the input after success (default: keep).           |
-| `--progress/--no-progress` | enc/dec/verify | Progress bar. Default: auto (on when stderr is a TTY).                |
-| `-v, --verbose`            | all            | More diagnostics on stderr.                                           |
-| `-q, --quiet`              | all            | Suppress progress and status output.                                  |
-| `-V, --version`            | —              | Print version.                                                        |
-| `-h, --help`               | —              | Print help.                                                           |
+| `-f, --force`              | enc/dec        | Overwrite an existing output file (default: refuse).                    |
+| `--remove`                 | enc/dec        | Best-effort delete the input after success (default: keep).             |
+| `--progress/--no-progress` | enc/dec/verify | Progress bar. Default: auto (on when stderr is a TTY).                  |
+| `-v, --verbose`            | all            | More diagnostics on stderr.                                             |
+| `-q, --quiet`              | all            | Suppress progress and status output.                                    |
+| `-V, --version`            | —              | Print version.                                                          |
+| `-h, --help`               | —              | Print help.                                                             |
 
 Cipher and KDF names are parsed as exact, lowercase strings shown in the table;
 there are no aliases and no case folding in v1.
@@ -710,7 +722,7 @@ setup to keyfile-only.
 remains reserved for the main input stream. Directories, special files, and
 symlinks that resolve to non-regular files are usage errors.
 
-Password bytes are used exactly as provided; paladin does no Unicode
+Password bytes are used exactly as provided; aesc does no Unicode
 normalization. Password text obtained from CLI argv, environment-variable
 values, TUI fields, and GTK entries is encoded as UTF-8 bytes; non-UTF-8
 password argv or environment values are usage errors. Path arguments are
@@ -728,7 +740,7 @@ re-encoded UTF-16LE for the v1/v2 KDF), so a `--password-file` whose bytes are
 not valid UTF-8 after the one-newline trim is a usage error (exit 2). This is how
 an AES Crypt key file is supplied — UTF-16/BOM key files, and byte-exact password
 files whose intended password ends in a newline, are out of scope. AES Crypt has
-no paladin-style keyfile component, so `-k` (or `--no-password`) against a `.aes`
+no aesc-style keyfile component, so `-k` (or `--no-password`) against a `.aes`
 file is also a usage error; for non-stdin decrypt/verify the CLI detects this and
 fails before prompting, and the core enforces it as a backstop for stdin.
 
@@ -740,19 +752,22 @@ accommodates any resulting length.
 
 ### 6.5 Output defaults
 
-- **Encrypt, no `-o`:** `<input>.paladin` (`.paladin.asc` if `--armor`).
+- **Encrypt, no `-o`:** `<input>.aesc` (`.aesc.asc` if `--armor`). New files are
+  always written with the `.aesc` suffix; `.paladin` is never written anymore.
 - **Decrypt, no `-o`:** use the stored filename if present and well-formed
   (§5.2); otherwise — no stored name, or one that fails the basename rules —
-  strip `.paladin.asc`, then `.paladin`, then `.asc`; else append `.dec`. If
-  stripping a recognized extension would leave an empty basename (an input named
-  exactly `.paladin`, `.asc`, or `.paladin.asc`), treat it as having no
-  recognizable extension and append `.dec` to the original basename instead
-  (e.g. `.paladin` → `.paladin.dec`).
+  strip the first matching suffix of `.aesc.asc`, `.paladin.asc`, `.aesc`,
+  `.paladin`, `.asc` (longest match first; `.paladin` is the legacy suffix from
+  before the rename and stays recognized so old files strip sensibly); else
+  append `.dec`. If stripping a recognized extension would leave an empty
+  basename (an input named exactly `.aesc`, `.paladin`, `.asc`, `.aesc.asc`, or
+  `.paladin.asc`), treat it as having no recognizable extension and append
+  `.dec` to the original basename instead (e.g. `.aesc` → `.aesc.dec`).
   Stored names are written beside the input file. Refuse to overwrite unless
   `-f`. An **AES Crypt** (`.aes`) file stores no filename, so its default output
   strips a trailing `.aes` (else appends `.dec`, with the same empty-basename
-  fallback: `.aes` → `.aes.dec`); `.aes` is also stripped by the paladin path so
-  a paladin file misnamed `*.aes` still strips sensibly.
+  fallback: `.aes` → `.aes.dec`); `.aes` is also stripped by the native path so
+  an aesc file misnamed `*.aes` still strips sensibly.
 - **Filesystem path inputs/outputs:** when `<FILE>` is not `-`, it must be an
   existing regular file. Directories, special files, and symlinks that resolve
   to non-regular files are usage errors. Output paths may name a new file or an
@@ -784,16 +799,16 @@ accommodates any resulting length.
 
 ### 6.6 Exit codes
 
-| Code | Meaning                                          |
-|------|--------------------------------------------------|
-| 0    | Success                                          |
-| 1    | General error (I/O, etc.)                        |
-| 2    | Usage / argument error                           |
+| Code | Meaning                                                  |
+|------|----------------------------------------------------------|
+| 0    | Success                                                  |
+| 1    | General error (I/O, etc.)                                |
+| 2    | Usage / argument error                                   |
 | 3    | Authentication failure (wrong password or tampered file) |
-| 4    | Unsupported, unknown, or malformed format/header |
-| 130  | Canceled by the user                             |
+| 4    | Unsupported, unknown, or malformed format/header         |
+| 130  | Canceled by the user                                     |
 
-Errors returned by `paladin-core` map directly from its `PalError` variants —
+Errors returned by `aesc-core` map directly from its `AescError` variants —
 the front-end does not reclassify them: `Auth` → 3; `BadMagic` /
 `UnsupportedVersion` / `UnsupportedAesCryptVersion` / `UnknownCipher` /
 `UnknownKdf` / `ReservedFlags` / `MalformedHeader` → 4; `InvalidOptions`
@@ -802,7 +817,7 @@ KDF params, an unsafe stored filename, an out-of-range programmatic `chunk_size`
 or a keyfile-bearing / password-less / non-UTF-8-password secret against a `.aes`
 file) → 2; `Canceled` → 130; `Io`, `InputTooLarge`, and the like → 1;
 argument/usage problems caught before the core is called → 2. The mapping lives
-in `paladin-common` and is shared by the CLI and TUI.
+in `aesc-common` and is shared by the CLI and TUI.
 
 For an AES Crypt file (§5.8), `UnsupportedAesCryptVersion` (a stream-format
 version this build does not read, including the not-yet-implemented v3) is exit
@@ -823,29 +838,29 @@ flag the worker-thread front-ends use. Cancellation is cooperative: the core
 checks before and after key derivation and between chunks, but a KDF call already
 running may finish before cancellation is observed. When cancellation is
 observed, the core's `on_progress` returns `ControlFlow::Break`, the operation
-returns `PalError::Canceled`, any temporary output is removed (§6.5), and the
+returns `AescError::Canceled`, any temporary output is removed (§6.5), and the
 process exits 130.
 
 ### 6.7 Examples
 
 ```sh
-paladin -e report.pdf                      # → report.pdf.paladin (prompts for password)
-paladin -e report.pdf -o - --armor > out   # armored to stdout
-paladin -d report.pdf.paladin             # → report.pdf (or prompts/derives name)
-paladin -i report.pdf.paladin             # show unauthenticated header metadata
-printf 'secret' | PW='passphrase' paladin -e - -o s.paladin --password-env PW
-paladin -e vault.tar -k usb.key --no-password
-paladin -e big.iso -c chacha20-poly1305 --remove
+aesc -e report.pdf                      # → report.pdf.aesc (prompts for password)
+aesc -e report.pdf -o - --armor > out   # armored to stdout
+aesc -d report.pdf.aesc             # → report.pdf (or prompts/derives name)
+aesc -i report.pdf.aesc             # show unauthenticated header metadata
+printf 'secret' | PW='passphrase' aesc -e - -o s.aesc --password-env PW
+aesc -e vault.tar -k usb.key --no-password
+aesc -e big.iso -c chacha20-poly1305 --remove
 ```
 
 ---
 
 ## 7. TUI application design
 
-**Binary:** `paladin-tui`. **Toolkit:** [ratatui](https://ratatui.rs/) for
+**Binary:** `aesc-tui`. **Toolkit:** [ratatui](https://ratatui.rs/) for
 widgets/layout + [crossterm](https://docs.rs/crossterm) for the terminal backend
 (raw mode, key and resize events). Like the other front-ends it is a thin view
-over `paladin-core` (reusing `paladin-common` for the terminal glue) and holds
+over `aesc-core` (reusing `aesc-common` for the terminal glue) and holds
 no crypto or format logic — it builds the same `Secret`/`EncryptOptions` and
 calls the same four core functions.
 
@@ -877,7 +892,7 @@ CLI remains the only v1 front-end with stdin/stdout streaming.
 - **Footer** key hints (Tab/Shift-Tab to move, Enter to run, Esc to cancel/quit,
   `?` for help).
 
-Optionally launch with a path (`paladin-tui <file>`) to prefill the input
+Optionally launch with a path (`aesc-tui <file>`) to prefill the input
 field.
 
 ### 7.2 Concurrency & cancellation
@@ -887,7 +902,7 @@ worker thread. `Progress` updates are sent over an `mpsc` channel that the UI
 drains each tick to redraw the gauge. Esc requests cancellation — the worker's
 `on_progress` callback returns `ControlFlow::Break` once the core observes the
 cancel flag before/after KDF work or between chunks, the core returns
-`PalError::Canceled`, and the front-end removes any temporary output it created
+`AescError::Canceled`, and the front-end removes any temporary output it created
 and shows a non-error canceled state. A KDF call already running may finish
 before cancellation takes effect. The password lives in a zeroizing buffer moved
 into the worker.
@@ -899,11 +914,11 @@ raw mode), not `rpassword`, which would conflict with raw mode.
 
 ## 8. GTK application design
 
-**Binary:** `paladin-gtk`. **Framework:** [relm4](https://relm4.org/) — an
+**Binary:** `aesc-gtk`. **Framework:** [relm4](https://relm4.org/) — an
 Elm-architecture layer over gtk4-rs — with
 [libadwaita](https://gnome.pages.gitlab.gnome.org/libadwaita/) for modern GNOME
 styling and `relm4-components` for ready-made helpers. Like the CLI and TUI it
-is a thin front-end and links the same `paladin-core`; it holds no crypto or
+is a thin front-end and links the same `aesc-core`; it holds no crypto or
 format logic.
 
 ### 8.1 Component model
@@ -954,7 +969,7 @@ applies to the progress bar; success or failure arrives as a final message shown
 via an `adw::Toast` or error dialog. Cancellation uses the command's shutdown
 handle (a shared `AtomicBool`) — the core observes it before/after KDF work or
 between chunks, the `on_progress` callback returns `ControlFlow::Break`, the
-core returns `PalError::Canceled`, and the GTK worker removes any temporary
+core returns `AescError::Canceled`, and the GTK worker removes any temporary
 output it created and shows a non-error canceled state. A KDF call already
 running may finish before cancellation takes effect. The password is moved into
 the worker in a zeroizing buffer.
@@ -999,7 +1014,7 @@ actions. Closing a modified editor raises an `adw::AlertDialog`
 
 **Saving.** Every save is a complete fresh `encrypt` of the buffer contents —
 new random salt and new nonce prefix, never a rewrite under the old file key —
-so the §11 nonce-uniqueness argument is unchanged. For a paladin source,
+so the §11 nonce-uniqueness argument is unchanged. For an aesc source,
 options derive from its `Header`: same cipher, KDF, KDF parameters, and chunk
 size; the stored-name choice is preserved (a source that stored a name stores the
 output's basename); armor is re-applied as recorded at open via `is_armored`
@@ -1009,17 +1024,17 @@ intact. Saving over the file that was opened skips the overwrite
 confirmation — that is what Save means — while Save As gets the native
 dialog's confirmation like any other output.
 
-**Saving an AES Crypt source is a migration.** paladin never writes the AES
-Crypt format (§5.8), and an AES Crypt header carries no paladin parameters to
+**Saving an AES Crypt source is a migration.** aesc never writes the AES
+Crypt format (§5.8), and an AES Crypt header carries no aesc parameters to
 derive from. The first save of an AES Crypt-sourced editor therefore raises an
 `adw::AlertDialog` warning that the file is an AES Crypt source and will be
-migrated to the paladin format if the user proceeds; Cancel writes nothing and
-leaves the buffer dirty. On confirmation the buffer is encrypted as a paladin
+migrated to the aesc format if the user proceeds; Cancel writes nothing and
+leaves the buffer dirty. On confirmation the buffer is encrypted as an aesc
 container with the §12 defaults (no stored name; armor as recorded at open) to
 the same path — the dialog notes that the file's name, including any `.aes`
-extension, stays the same even though its format does not (paladin's reads
+extension, stays the same even though its format does not (aesc's reads
 auto-detect the container regardless of extension). After a successful
-migration save the editor treats the file as a paladin source: subsequent
+migration save the editor treats the file as an aesc source: subsequent
 saves derive options from what was just written and show no dialog.
 
 **New note.** Opens an empty editor with no backing file. The first Save asks
@@ -1043,36 +1058,36 @@ files, external-change detection (last write wins), and syntax highlighting.
 
 ## 9. Dependencies
 
-| Crate                          | Used in            | Purpose                                  |
-|--------------------------------|--------------------|------------------------------------------|
-| `aes-gcm`                      | core               | AES-256-GCM AEAD                         |
-| `chacha20poly1305`             | core               | ChaCha20-Poly1305 AEAD                   |
-| `argon2`                       | core               | Argon2id KDF                             |
-| `scrypt`                       | core               | scrypt KDF                               |
-| `pbkdf2` + `sha2`              | core               | PBKDF2-HMAC-SHA256 KDF                   |
-| `aes` + `cbc` + `hmac`         | core               | AES-256-CBC + HMAC-SHA256 for AES Crypt read interop (§5.8) |
-| `rand` / `getrandom`           | core               | CSPRNG for salt + nonce prefix           |
-| `zeroize`                      | core, cli, gtk     | Wipe key material from memory            |
-| `base64`                       | core               | ASCII armor                              |
-| `thiserror`                    | core, common       | Typed errors (`PalError`)                |
-| `tempfile`                     | common, gtk, tests | Sibling temp files and test directories  |
-| `clap` (derive)                | cli, tui¹          | Argument parsing                         |
-| `rpassword`                    | cli                | No-echo password prompt                  |
-| `indicatif`                    | cli                | Progress bar                             |
-| `ctrlc`                        | cli                | SIGINT handler → cancel flag             |
-| `ratatui`                      | tui                | Terminal UI widgets/layout               |
-| `crossterm`                    | tui                | Terminal backend, raw mode, key events   |
-| `relm4` + `relm4-components`   | gtk                | GUI framework over gtk4-rs (Elm arch.)²  |
-| `libadwaita`                   | gtk                | GNOME widgets and styling                |
-| `anyhow`                       | tui, gtk           | Error reporting / context                |
+| Crate                        | Used in            | Purpose                                                     |
+|------------------------------|--------------------|-------------------------------------------------------------|
+| `aes-gcm`                    | core               | AES-256-GCM AEAD                                            |
+| `chacha20poly1305`           | core               | ChaCha20-Poly1305 AEAD                                      |
+| `argon2`                     | core               | Argon2id KDF                                                |
+| `scrypt`                     | core               | scrypt KDF                                                  |
+| `pbkdf2` + `sha2`            | core               | PBKDF2-HMAC-SHA256 KDF                                      |
+| `aes` + `cbc` + `hmac`       | core               | AES-256-CBC + HMAC-SHA256 for AES Crypt read interop (§5.8) |
+| `rand` / `getrandom`         | core               | CSPRNG for salt + nonce prefix                              |
+| `zeroize`                    | core, cli, gtk     | Wipe key material from memory                               |
+| `base64`                     | core               | ASCII armor                                                 |
+| `thiserror`                  | core, common       | Typed errors (`AescError`)                                  |
+| `tempfile`                   | common, gtk, tests | Sibling temp files and test directories                     |
+| `clap` (derive)              | cli, tui¹          | Argument parsing                                            |
+| `rpassword`                  | cli                | No-echo password prompt                                     |
+| `indicatif`                  | cli                | Progress bar                                                |
+| `ctrlc`                      | cli                | SIGINT handler → cancel flag                                |
+| `ratatui`                    | tui                | Terminal UI widgets/layout                                  |
+| `crossterm`                  | tui                | Terminal backend, raw mode, key events                      |
+| `relm4` + `relm4-components` | gtk                | GUI framework over gtk4-rs (Elm arch.)²                     |
+| `libadwaita`                 | gtk                | GNOME widgets and styling                                   |
+| `anyhow`                     | tui, gtk           | Error reporting / context                                   |
 
 ¹ The TUI uses `clap` only for an optional launch path; all interaction happens
 in the UI, and password input is captured in its own masked field (not
 `rpassword`).
 
 ² relm4 builds on gtk4-rs and pairs with libadwaita for styling;
-`relm4-components` supplies file-dialog and worker helpers. `paladin-common`
-depends only on `paladin-core`, the standard library, `thiserror`, and
+`relm4-components` supplies file-dialog and worker helpers. `aesc-common`
+depends only on `aesc-core`, the standard library, `thiserror`, and
 `tempfile`.
 
 Version requirements are selected at scaffolding time via `cargo add` (latest
@@ -1113,7 +1128,7 @@ chosen for being pure-Rust and widely reviewed.
   markers.
 - STREAM nonce derivation: counter increments, final flag placement.
 - Pure helpers: `default_encrypt_output` / `default_decrypt_output` (including
-  the empty-basename fallback, e.g. `.paladin` → `.paladin.dec`) and
+  the empty-basename fallback, e.g. `.aesc` → `.aesc.dec`) and
   exact lowercase cipher/KDF `FromStr`/`Display` round-trips with alias/case
   rejection; and `is_armored` on marker, non-marker, truncated, and empty
   prefixes (LF and CRLF), agreeing with decrypt's armor auto-detect.
@@ -1143,7 +1158,7 @@ always uses OS randomness.
 
 **AES Crypt read interop (§5.8):** genuine Stream Format 2 `.aes` fixtures are
 minted by the reference `aescrypt` tool (committed under
-`paladin-core/tests/data/aescrypt/` with a generator script and the exact tool
+`aesc-core/tests/data/aescrypt/` with a generator script and the exact tool
 version) and a v1 fixture is mechanically derived from a v2 one; round-trip tests
 decrypt them byte-for-byte across plaintext sizes 0, 1, 15, 16, 17, and a few
 KiB, including a non-ASCII (UTF-16LE) password. The v1/v2 KDF is pinned by an
@@ -1161,7 +1176,7 @@ exercised on the AES Crypt path too. CLI `assert_cmd` tests cover decrypt
 tests.
 
 **Front-end tests.** Because the front-ends are thin, most coverage lives in
-core. `paladin` gets CLI integration tests (`assert_cmd` + `tempfile`):
+core. `aesc` gets CLI integration tests (`assert_cmd` + `tempfile`):
 default-extension behavior, required `-o` for stdin encrypt/decrypt,
 `--remove` rejection with stdin, `--remove` warning-but-success when deletion
 fails after successful output finalization, output-equals-input refusal, `-o -`
@@ -1178,12 +1193,12 @@ codes including
 130 for cancellation, exact lowercase cipher/KDF parsing, non-UTF-8
 OS-native path handling where the platform supports it, and password bytes via
 file/env/`--no-password`. The
-`paladin-common`
+`aesc-common`
 glue (path-or-stdin opening, clobber check, best-effort remove, password-source
 exclusivity/resolution, exit-code mapping, and temp-file finalization) is
-unit-tested directly. `paladin-tui` gets light tests of its non-UI glue,
+unit-tested directly. `aesc-tui` gets light tests of its non-UI glue,
 including rejection of `-` for path fields;
-headless GTK testing is limited, so `paladin-gtk` relies on manual verification
+headless GTK testing is limited, so `aesc-gtk` relies on manual verification
 plus the shared core/helper tests.
 
 Per repo convention, tests accompany every code change.
@@ -1200,7 +1215,7 @@ Per repo convention, tests accompany every code change.
   delete and the help says so plainly — we will not pretend to "shred."
 - **Filenames/sizes can be sensitive.** Storing the original filename is opt-in
   (`--name`) and stores only a well-formed basename. Approximate plaintext size
-  always leaks from ciphertext length; paladin does not pad. v1 refuses to
+  always leaks from ciphertext length; aesc does not pad. v1 refuses to
   encrypt, decrypt, or verify plaintext larger than 64 GiB. (Padding is a
   possible future option.)
 - **Wrong password vs. corruption** are indistinguishable by design and reported
@@ -1237,8 +1252,8 @@ Per repo convention, tests accompany every code change.
   body byte (a wrong password fails early with no output), `hmac2` is verified
   before the final block is `fsmod`-truncated (no padding oracle), tags are
   compared in constant time, and extension count/size, the v3 iteration count
-  (when v3 lands), and body size are bounded against hostile input. paladin
-  never *writes* this format; re-encrypting decrypted data with paladin's own
+  (when v3 lands), and body size are bounded against hostile input. aesc
+  never *writes* this format; re-encrypting decrypted data with aesc's own
   authenticated format is the recommended migration (the GTK editor automates
   this for small text files via its confirm-then-migrate save, §8.4).
 - **The GTK editor holds plaintext in widget memory (§8.4).** While a file is
@@ -1277,13 +1292,17 @@ implementation begins, and tests in §10 verify each integrity property.
 | GTK editor text cap  | 8 MiB (§8.4)                    |
 | Key length           | 32 bytes (256-bit)              |
 | Tag length           | 16 bytes (128-bit)              |
-| Output extension     | `.paladin` (`.paladin.asc` armored) |
+| Output extension     | `.aesc` (`.aesc.asc` armored)   |
+
+Legacy `.paladin`/`.paladin.asc` suffixes (from before the rename) and foreign
+AES Crypt `.aes` files remain accepted on read (§5.8, §6.5); only the write
+default changed.
 
 ---
 
 ## 13. Out of scope for v1
 
-**AES Crypt encryption** (paladin reads `.aes` files but never writes them —
+**AES Crypt encryption** (aesc reads `.aes` files but never writes them —
 §5.8) and **AES Crypt Stream Format 3** (deferred until its PBKDF2 salt can be
 pinned from a real v3 fixture; a v3 file is rejected as
 `UnsupportedAesCryptVersion` until then). Also: asymmetric crypto, compression,
@@ -1298,7 +1317,7 @@ autosave or crash-recovery files, detection of external modification while a
 file is open (last write wins), syntax highlighting (GtkSourceView is a
 candidate later upgrade from `GtkTextView`), saving back into the AES Crypt
 format (an AES Crypt source opens fine, but its confirmed save always produces
-a paladin container, §8.4), and editing text beyond the 8 MiB cap or non-UTF-8
+an aesc container, §8.4), and editing text beyond the 8 MiB cap or non-UTF-8
 content — decrypt to a file and edit externally instead.
 
 ---
@@ -1314,7 +1333,7 @@ All open questions are now settled:
 - [x] **Argon2id parallelism default.** Keep **1 lane** (deterministic and
       portable; §12).
 - [x] **`--info` and `--verify` in v1.** Yes — both ship in v1 (§6.2).
-- [x] **Shared terminal glue.** Use a dedicated **`paladin-common`** crate for
+- [x] **Shared terminal glue.** Use a dedicated **`aesc-common`** crate for
       the CLI+TUI glue (§2) so nothing is reimplemented.
 - [x] **TUI file selection.** Plain **path entry** for v1; a built-in
       file-browser popup is a post-v1 enhancement (§7.1).
@@ -1329,7 +1348,7 @@ All open questions are now settled:
       reject `--remove` with stdin, and finalize file outputs via temp-file
       rename only after success (§6.5).
 - [x] **Keyfile-only and cancellation semantics.** Keyfile-only mode requires
-      `--no-password`; cancellation returns `PalError::Canceled`, maps to CLI
+      `--no-password`; cancellation returns `AescError::Canceled`, maps to CLI
       exit 130, and is shown as non-error cancellation in UIs (§6.4, §6.6, §7,
       §8).
 - [x] **CLI edge-case behavior.** `--info` has stable `key: value` output;
@@ -1351,9 +1370,19 @@ All open questions are now settled:
       and nonce prefix) that preserves the source's cipher/KDF/parameters,
       stored-name choice, and armor. Plaintext never touches disk; the session
       secret is held zeroized for the editor window's lifetime; AES Crypt
-      sources open for editing, and their first save migrates to the paladin
-      format behind a confirmation dialog — paladin still never writes AES
+      sources open for editing, and their first save migrates to the aesc
+      format behind a confirmation dialog — aesc still never writes AES
       Crypt (§5.8, §8.4, §11, §12, §13).
+- [x] **Rename to aesc (2026-10).** The application was renamed from
+      **paladin** to **aesc**: crates (`aesc-core`, `aesc-common`, `aesc-cli`,
+      `aesc-tui`, `aesc-gtk`), binaries (`aesc`, `aesc-tui`, `aesc-gtk`), the
+      GTK app id (`org.aesc.Gtk`), and the default output extension (`.aesc`,
+      `.aesc.asc` armored). The on-disk format is **unchanged**: the
+      `"PALADIN"` magic (§5.2), the armor markers (§5.6), and the KDF domain
+      tag (§4.2) keep their original bytes so every existing file still
+      decrypts and old/new builds stay interchangeable. The legacy `.paladin`
+      and `.paladin.asc` suffixes stay recognized when deriving decrypt output
+      names, but new files are only ever written as `.aesc` (§6.5).
 
 ---
 
@@ -1364,9 +1393,9 @@ document stays focused on *what* to build while the plans capture *how* and *in
 what order*. They currently start as stubs holding the original checklist items
 and will be expanded once this design stabilizes.
 
-| Plan file                          | Covers                                                       |
-| ---------------------------------- | ------------------------------------------------------------ |
-| `IMPLEMENTATION_PLAN_01_CORE.md`   | Workspace scaffold, `paladin-core`, and `paladin-common`.  |
-| `IMPLEMENTATION_PLAN_02_CLI.md`    | `paladin` command-line front-end.                           |
-| `IMPLEMENTATION_PLAN_03_TUI.md`    | `paladin-tui` terminal front-end.                           |
-| `IMPLEMENTATION_PLAN_04_GTK.md`    | `paladin-gtk` relm4/libadwaita desktop front-end.           |
+| Plan file                        | Covers                                              |
+|----------------------------------|-----------------------------------------------------|
+| `IMPLEMENTATION_PLAN_01_CORE.md` | Workspace scaffold, `aesc-core`, and `aesc-common`. |
+| `IMPLEMENTATION_PLAN_02_CLI.md`  | `aesc` command-line front-end.                      |
+| `IMPLEMENTATION_PLAN_03_TUI.md`  | `aesc-tui` terminal front-end.                      |
+| `IMPLEMENTATION_PLAN_04_GTK.md`  | `aesc-gtk` relm4/libadwaita desktop front-end.      |

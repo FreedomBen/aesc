@@ -1,7 +1,7 @@
 # Implementation Plan 01 — Core & Common
 
-> Scope: the Cargo workspace scaffold, the `paladin-core` library (all crypto,
-> file format, streaming, armor, pure helpers), and the `paladin-common`
+> Scope: the Cargo workspace scaffold, the `aesc-core` library (all crypto,
+> file format, streaming, armor, pure helpers), and the `aesc-common`
 > terminal glue shared by the CLI and TUI. This is the foundation the three
 > front-end plans (`02`–`04`) all depend on, so it is built first.
 
@@ -14,13 +14,13 @@ plan, then the code.
 > ("the shared libraries … are implemented and tested") and the git history
 > (`Add ASCII armor and the public encrypt/decrypt/inspect/verify API`, `Add
 > known-answer vectors and public-API integration tests`, `Add default
-> output-path helpers`, `Implement paladin-common terminal glue`), the
-> workspace, `paladin-core`, and `paladin-common` are already built. The
+> output-path helpers`, `Implement aesc-common terminal glue`), the
+> workspace, `aesc-core`, and `aesc-common` are already built. The
 > checklists below are ticked to reflect that committed state — they now serve as
 > an as-built spec and a re-verification checklist. The API sketches in each
 > phase have been reconciled to the shipped names and signatures; where the
 > as-built diverged from the original sketch (method vs. free function,
-> `to_words`/`from_words`, `auto_dearmor`, the `paladin-common` module split,
+> `to_words`/`from_words`, `auto_dearmor`, the `aesc-common` module split,
 > etc.) an **As built** note flags it. Re-run `cargo test` +
 > `cargo clippy --all-targets --all-features` to confirm green.
 
@@ -40,27 +40,27 @@ plan, then the code.
 
 ## Guiding constraints (the core's hard boundary)
 
-These come straight from §2.2 and must hold for every line in `paladin-core`:
+These come straight from §2.2 and must hold for every line in `aesc-core`:
 
 - Never reads argv, never prompts, never touches the filesystem, never decides
   whether to overwrite, never exits the process.
 - Operates on generic `Read`/`Write`; reports progress through an `on_progress`
-  callback that returns `ControlFlow::Break` to cancel (→ `PalError::Canceled`).
+  callback that returns `ControlFlow::Break` to cancel (→ `AescError::Canceled`).
 - **RustCrypto crates only** — no hand-rolled crypto (§4.1).
 - All key material and derived buffers wrapped in `zeroize` (§4.1, §11).
 - All multi-byte integers **big-endian** on the wire (§5.1).
 - Unauthenticated header lengths/KDF costs are range-checked **before** any
   allocation or key derivation (§5.4, §11).
-- `PalError` → exit-code classification lives in `paladin-common`, **not** in
+- `AescError` → exit-code classification lives in `aesc-common`, **not** in
   the core and **not** in the front-ends (§6.6).
 
 ## Crates to scaffold & dependency direction
 
-Workspace members: `paladin-core`, `paladin-common`, `paladin-cli`,
-`paladin-tui`, `paladin-gtk`. Direction: `common`/`cli`/`tui`/`gtk` → `core`;
+Workspace members: `aesc-core`, `aesc-common`, `aesc-cli`,
+`aesc-tui`, `aesc-gtk`. Direction: `common`/`cli`/`tui`/`gtk` → `core`;
 `cli`/`tui` → `common`; `gtk` deliberately skips `common` (§2).
 
-This plan implements **`paladin-core`** and **`paladin-common`** fully. The
+This plan implements **`aesc-core`** and **`aesc-common`** fully. The
 three front-end crates are scaffolded as compiling placeholders only (a `main`
 that prints "not implemented") so the workspace stays green; their real work and
 dependencies arrive in plans `02`–`04`. Do **not** add front-end deps
@@ -78,9 +78,9 @@ dependencies arrive in plans `02`–`04`. Do **not** add front-end deps
   five crates under `crates/`, and a shared `[workspace.package]` (edition
   `2021`, rust-version `1.94`, license, repository) + `[workspace.dependencies]`
   table so versions are pinned once.
-- Create the directory tree from §2.1 (`crates/paladin-core/src/{lib,error,
+- Create the directory tree from §2.1 (`crates/aesc-core/src/{lib,error,
   secret,header,kdf,cipher,stream,armor,paths}.rs` as empty modules wired into
-  `lib.rs`; `crates/paladin-common/src/lib.rs`; placeholder `main.rs` for the
+  `lib.rs`; `crates/aesc-common/src/lib.rs`; placeholder `main.rs` for the
   three front-ends).
 - Add core deps via `cargo add` (pins land in `Cargo.lock`, §9): `aes-gcm`,
   `chacha20poly1305`, `argon2`, `scrypt`, `pbkdf2`, `sha2`, `getrandom`,
@@ -89,7 +89,7 @@ dependencies arrive in plans `02`–`04`. Do **not** add front-end deps
   comes straight from `getrandom::fill`, so the `rand`/`rand_core` wrappers are
   not added as direct deps — `rand` is absent from the tree, `rand_core` is only
   pulled transitively by the KDF crates.)
-- `paladin-common` deps: path `paladin-core`, `thiserror`, `tempfile`, and
+- `aesc-common` deps: path `aesc-core`, `thiserror`, `tempfile`, and
   `zeroize`. **As built:** `tempfile` is a normal dependency (the `open_output`
   sibling temp file), not a dev-dep, and `zeroize` is added so the password and
   keyfile readers can return `Zeroizing<Vec<u8>>`.
@@ -98,9 +98,9 @@ dependencies arrive in plans `02`–`04`. Do **not** add front-end deps
 **Checklist**
 
 - [x] Root workspace manifest with resolver, members, shared package + deps.
-- [x] `paladin-core` crate with all module files stubbed and re-exported.
-- [x] `paladin-common` crate stub.
-- [x] `paladin-cli` (bin `paladin`), `paladin-tui`, `paladin-gtk` placeholders.
+- [x] `aesc-core` crate with all module files stubbed and re-exported.
+- [x] `aesc-common` crate stub.
+- [x] `aesc-cli` (bin `aesc`), `aesc-tui`, `aesc-gtk` placeholders.
 - [x] Core + common dependencies added and pinned.
 - [x] `cargo build`, `cargo fmt --check`, `cargo clippy`, `cargo test` all clean.
 
@@ -116,9 +116,9 @@ later phases use it. Variants align 1:1 with the §6.6 exit-code mapping.
 ```rust
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]               // future variants must not break front-end matches
-pub enum PalError {
+pub enum AescError {
     Auth,                       // wrong password OR corrupt/tampered (indistinguishable) → 3
-    BadMagic,                   // not a paladin file                                    → 4
+    BadMagic,                   // not an aesc file                                    → 4
     UnsupportedVersion(u8),     //                                                        → 4
     UnknownCipher(u8),          //                                                        → 4
     UnknownKdf(u8),             //                                                        → 4
@@ -129,11 +129,11 @@ pub enum PalError {
     Canceled,                   // on_progress returned Break                             → 130
     Io(#[from] std::io::Error), //                                                        → 1
 }
-pub type Result<T> = std::result::Result<T, PalError>;
+pub type Result<T> = std::result::Result<T, AescError>;
 ```
 
-**As built:** `ReservedFlags(u8)` carries the offending flag byte, and `PalError`
-is `#[non_exhaustive]` — so the `exit_code` classifier in `paladin-common` keeps
+**As built:** `ReservedFlags(u8)` carries the offending flag byte, and `AescError`
+is `#[non_exhaustive]` — so the `exit_code` classifier in `aesc-common` keeps
 a catch-all `_ => EXIT_GENERAL` arm for any future variant.
 
 **Tests first**
@@ -144,7 +144,7 @@ a catch-all `_ => EXIT_GENERAL` arm for any future variant.
 
 **Checklist**
 
-- [x] `PalError` with all variants from §6.6 + `Result<T>` alias.
+- [x] `AescError` with all variants from §6.6 + `Result<T>` alias.
 - [x] `Auth` message conflates wrong-password and tamper (§4.4).
 - [x] `From<io::Error>` impl + tests.
 
@@ -171,7 +171,8 @@ impl Secret {
 ```
 
 Encoding (exact, §4.2):
-`b"paladin secret v1\0" || u64be(pw_len) || pw || u64be(kf_len) || kf`.
+`b"paladin secret v1\0" || u64be(pw_len) || pw || u64be(kf_len) || kf`
+(the domain tag keeps the original project name — it is part of the v1 format).
 
 **Tests first**
 
@@ -276,7 +277,7 @@ impl KdfParams {
 **As built (naming):** `default_params` → `default_for`; `matches(kdf)` →
 `kdf_id() == kdf`; `ranges_ok() -> bool` → `validate() -> Result<(), &'static
 str>`; `to_wire`/`from_wire` → `to_words`/`from_words` (both return the reason
-string, not a `PalError`, so the caller chooses `MalformedHeader` vs
+string, not a `AescError`, so the caller chooses `MalformedHeader` vs
 `InvalidOptions`); `derive_key` is a method on `KdfParams`, not a free function.
 
 Range rules (§5.4) — validate **before** deriving:
@@ -462,12 +463,12 @@ Rules to implement:
   chunk, swapped chunks, sub-tag fragment, empty body.
 - Size cap: with a tiny `size_cap`, encrypt of `cap+1` bytes → `InputTooLarge`;
   a crafted over-cap authenticated stream → decrypt/verify `InputTooLarge`.
-- Cancellation: an `on_progress` returning `Break` → `PalError::Canceled`, on the
+- Cancellation: an `on_progress` returning `Break` → `AescError::Canceled`, on the
   encrypt path (before KDF and between chunks) and on the decrypt/verify path.
 - Per-file uniqueness: two encryptions of identical input/secret/opts produce
   different ciphertext (fresh random salt + nonce prefix) and both still decrypt.
 - I/O errors: a failing `Write` (encrypt) and a failing `Read` mid-body (decrypt)
-  surface as `PalError::Io`, distinct from EOF→`MalformedHeader` and tag→`Auth`.
+  surface as `AescError::Io`, distinct from EOF→`MalformedHeader` and tag→`Auth`.
 - Chunk-count overflow: driving the `start_counter` seam to `u32::MAX` makes a
   multi-chunk encrypt return `InputTooLarge`. (The decrypt-side guard is left
   uncovered: reaching it would require forging 2^32 authentic chunks.)
@@ -557,21 +558,23 @@ pub fn default_encrypt_output(input: &Path, armor: bool) -> PathBuf;
 pub fn default_decrypt_output(input: &Path, header: &Header) -> PathBuf;
 ```
 
-- Encrypt: append `.paladin` (or `.paladin.asc` when `armor`).
+- Encrypt: append `.aesc` (or `.aesc.asc` when `armor`). New files are never
+  written with the legacy `.paladin` suffix.
 - Decrypt: if `header.name_status == Present`, place that basename beside the
-  input; else strip `.paladin.asc`, then `.paladin`, then `.asc`; else append
-  `.dec`. Empty-basename fallback: input named exactly `.paladin` / `.asc` /
-  `.paladin.asc` → append `.dec` to the original (e.g. `.paladin` →
-  `.paladin.dec`).
+  input; else strip `.aesc.asc`, then `.paladin.asc` (legacy), then `.aesc`,
+  then `.paladin` (legacy), then `.asc`; else append `.dec`. Empty-basename
+  fallback: input named exactly `.aesc` / `.paladin` / `.asc` / `.aesc.asc` /
+  `.paladin.asc` → append `.dec` to the original (e.g. `.aesc` →
+  `.aesc.dec`).
 
 **Tests first**
 
-- `report.pdf` → `report.pdf.paladin`; armored → `report.pdf.paladin.asc`.
+- `report.pdf` → `report.pdf.aesc`; armored → `report.pdf.aesc.asc`.
 - Decrypt with stored `Present` name → that name beside the input dir.
-- Strip each recognized extension: `x.paladin.asc`→`x`, `x.paladin`→`x`,
-  `x.asc`→`x`; unknown → `x.dec`.
-- Empty-basename fallback: `.paladin`→`.paladin.dec`, `.asc`→`.asc.dec`,
-  `.paladin.asc`→`.paladin.asc.dec`.
+- Strip each recognized extension: `x.aesc.asc`→`x`, `x.paladin.asc`→`x`,
+  `x.aesc`→`x`, `x.paladin`→`x`, `x.asc`→`x`; unknown → `x.dec`.
+- Empty-basename fallback: `.aesc`→`.aesc.dec`, `.paladin`→`.paladin.dec`,
+  `.asc`→`.asc.dec`, `.aesc.asc`→`.aesc.asc.dec`.
 - `IgnoredUnsafe`/`Absent` names fall through to extension stripping.
 
 **Checklist**
@@ -687,7 +690,7 @@ uses fresh OS randomness.
 fast; cost-correctness is already covered in Phase 4. **As built, this coverage
 lives inline in the `src/*.rs` `#[cfg(test)]` modules** (each module tests its
 own format/stream/armor internals), with a single external
-`crates/paladin-core/tests/integration.rs` exercising the composed public API
+`crates/aesc-core/tests/integration.rs` exercising the composed public API
 (`encrypt`/`decrypt`/`inspect`/`verify` + path helpers) the front-ends use.
 
 **Round-trip** (`stream.rs::round_trip_across_sizes_and_ciphers`) over sizes
@@ -726,23 +729,23 @@ vectors (no `tests/vectors/` directory):
 
 ---
 
-## Phase 11 — `paladin-common` (terminal glue)
+## Phase 11 — `aesc-common` (terminal glue)
 
 **Goal:** the shared CLI+TUI glue (§2.2, §6.4–§6.6). Depends only on
-`paladin-core` + std + `thiserror` + `tempfile`. No crypto, no format logic.
+`aesc-core` + std + `thiserror` + `tempfile`. No crypto, no format logic.
 **As built**, the crate is split into `lib.rs` + `error.rs` + `fs.rs` +
 `password.rs` (the §2.1 sketch shows a single `lib.rs`).
 
 **Responsibilities & API sketch**
 
 ```rust
-// error.rs — exit-code mapping (the ONLY place PalError is classified, §6.6) plus
-// the front-end error type. PalError is #[non_exhaustive], so exit_code keeps a
+// error.rs — exit-code mapping (the ONLY place AescError is classified, §6.6) plus
+// the front-end error type. AescError is #[non_exhaustive], so exit_code keeps a
 // catch-all `_ => EXIT_GENERAL`.
 pub const EXIT_OK/EXIT_GENERAL/EXIT_USAGE/EXIT_AUTH/EXIT_FORMAT/EXIT_CANCELED: i32; // 0/1/2/3/4/130
-pub fn exit_code(err: &PalError) -> i32; // Auth→3, BadMagic/Version/Cipher/Kdf/ReservedFlags/Malformed→4,
+pub fn exit_code(err: &AescError) -> i32; // Auth→3, BadMagic/Version/Cipher/Kdf/ReservedFlags/Malformed→4,
                                          // InvalidOptions→2, Canceled→130, Io/InputTooLarge/_→1
-pub enum AppError { Core(PalError), Usage(String), Io(io::Error) } // replaces the sketch's `UsageError`
+pub enum AppError { Core(AescError), Usage(String), Io(io::Error) } // replaces the sketch's `UsageError`
 impl AppError { pub fn usage(msg: impl Into<String>) -> Self; pub fn exit_code(&self) -> i32; }
 pub type AppResult<T> = Result<T, AppError>;
 
@@ -791,7 +794,7 @@ Rules to enforce (from §6.4/§6.5):
 
 **Tests first** (unit, with `tempfile`)
 
-- `exit_code` for every `PalError` variant → §6.6 table.
+- `exit_code` for every `AescError` variant → §6.6 table.
 - Source exclusivity (two sources → error); empty-source rejection per source;
   `--no-password` empty accepted only with a keyfile.
 - password-file: trailing LF/CRLF trim, >1 MiB rejected, `-` rejected,
@@ -812,7 +815,7 @@ Rules to enforce (from §6.4/§6.5):
 - [x] Password-file / keyfile readers with size caps, `-`/non-regular rejection.
 - [x] Clobber, same-file (symlink/hardlink), and temp-file `0600` finalization.
 - [x] `best_effort_remove` warn-but-success behavior.
-- [x] All `paladin-common` unit tests green.
+- [x] All `aesc-common` unit tests green.
 
 ---
 
@@ -820,11 +823,11 @@ Rules to enforce (from §6.4/§6.5):
 
 - [x] `cargo fmt --check` clean across the workspace.
 - [x] `cargo clippy --all-targets --all-features` — **zero** warnings.
-- [x] `cargo test` green for `paladin-core` and `paladin-common`.
+- [x] `cargo test` green for `aesc-core` and `aesc-common`.
 - [x] `cargo build --release` succeeds (front-end placeholders included).
 - [x] `README.md` "Development commands" still match reality; update if drifted.
 - [x] Confirm the core honors its boundary: a quick grep shows no argv/stdin/
-      `std::process::exit`/filesystem access inside `paladin-core`.
+      `std::process::exit`/filesystem access inside `aesc-core`.
 
 ---
 
@@ -845,14 +848,14 @@ Rules to enforce (from §6.4/§6.5):
 | Round-trip across sizes × ciphers × KDFs                   | 10    |
 | Negative/tamper (flip, downgrade, truncate, append, swap…) | 10    |
 | Known-answer vectors (committed, deterministic generation) | 9, 10 |
-| `paladin-common` glue (I/O, clobber, remove, mapping)     | 11    |
+| `aesc-common` glue (I/O, clobber, remove, mapping)     | 11    |
 
 ## Definition of done
 
 - All Phase 0–12 checklists ticked.
-- `paladin-core` exposes exactly the §2.3 surface and never crosses its §2.2
+- `aesc-core` exposes exactly the §2.3 surface and never crosses its §2.2
   boundary.
-- `paladin-common` is the sole place `PalError` is mapped to exit codes.
+- `aesc-common` is the sole place `AescError` is mapped to exit codes.
 - Every §10 test exists and passes; `fmt`/`clippy` clean.
 - The CLI plan (`IMPLEMENTATION_PLAN_02_CLI.md`) can build entirely on the public
   core API + common glue with no further core changes.

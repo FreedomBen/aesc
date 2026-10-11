@@ -86,5 +86,5 @@ jobs:
             gh release upload "${GITHUB_REF_NAME}" --clobber dist/*
           else
             gh release create "${GITHUB_REF_NAME}" --verify-tag --generate-notes \
-              --title "paladin ${GITHUB_REF_NAME}" dist/*
+              --title "aesc ${GITHUB_REF_NAME}" dist/*
           fi

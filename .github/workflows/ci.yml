@@ -4,7 +4,7 @@
 # Supply-chain notes: the third-party action (Swatinem/rust-cache) is pinned to
 # a full commit SHA; GitHub-owned actions/* are pinned to major tags; nfpm is
 # pinned by version and verified against its published SHA-256 checksum before
-# installing. ubuntu-24.04 is pinned explicitly because paladin-gtk needs
+# installing. ubuntu-24.04 is pinned explicitly because aesc-gtk needs
 # GTK >= 4.10 and libadwaita >= 1.5 (24.04 ships 4.14 / 1.5).
 
 name: CI

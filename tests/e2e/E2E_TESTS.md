@@ -1,4 +1,4 @@
-# paladin CLI — E2E test backlog
+# aesc CLI — E2E test backlog
 
 The backlog of end-to-end cases for the Ruby/minitest suite in `tests/e2e/`.
 Each planned `cases/<name>_test.rb` is a section below; check items off as they
@@ -9,11 +9,11 @@ land. See `README.md` for how to run the suite and add a case.
 
 **Ground rules**
 
-- Black-box only: drive the real built binary via the `paladin` helper. Don't
-  re-prove the in-process Rust assertions in `crates/paladin-cli/tests/it_*.rs`
+- Black-box only: drive the real built binary via the `aesc` helper. Don't
+  re-prove the in-process Rust assertions in `crates/aesc-cli/tests/it_*.rs`
   (cipher, flags, info, io_errors, roundtrip, secret, stdio) — cover what only a
   full-binary shell test can.
-- Reuse `E2ETest` helpers: `paladin`, `make_input`/`write_input`, `flip_byte`,
+- Reuse `E2ETest` helpers: `aesc`, `make_input`/`write_input`, `flip_byte`,
   `set_byte`, `truncate_input`, `assert_status`, `assert_failure`,
   `assert_size_grew`, `assert_identical`, and constants `DEFAULT_PASSWORD`,
   `CHUNK`, `FAST_KDF`.
@@ -22,23 +22,23 @@ land. See `README.md` for how to run the suite and add a case.
 
 **Legend:** `[x]` done · `[ ]` to do · ⚠ resolved-against-binary note.
 
-**Exit codes** (`paladin-common/src/error.rs`)
+**Exit codes** (`aesc-common/src/error.rs`)
 
-| Code | Meaning              | Example trigger                                                   |
-| ---: | -------------------- | ---------------------------------------------------------------- |
-|    0 | success              | any successful operation                                         |
-|    1 | general / I/O        | output directory missing, write failure, unreadable input        |
-|    2 | usage                | bad flags, refuse-to-overwrite, missing/non-regular input, bad options |
-|    3 | auth failure         | wrong password / tampered / truncated (indistinguishable)       |
-|    4 | unsupported format   | bad magic, unknown version/cipher/kdf id, reserved flag bits     |
-|  130 | canceled             | SIGINT mid-operation                                            |
+| Code | Meaning            | Example trigger                                                        |
+|-----:|--------------------|------------------------------------------------------------------------|
+| 0    | success            | any successful operation                                               |
+| 1    | general / I/O      | output directory missing, write failure, unreadable input              |
+| 2    | usage              | bad flags, refuse-to-overwrite, missing/non-regular input, bad options |
+| 3    | auth failure       | wrong password / tampered / truncated (indistinguishable)              |
+| 4    | unsupported format | bad magic, unknown version/cipher/kdf id, reserved flag bits           |
+| 130  | canceled           | SIGINT mid-operation                                                   |
 
 ---
 
 ## Done (for context)
 
 - [x] **roundtrip** (`cases/roundtrip_test.rb`) — fixture round-trip on defaults,
-  size sweep across the 64 KiB chunk boundary (incl. empty), default `.paladin` name.
+  size sweep across the 64 KiB chunk boundary (incl. empty), default `.aesc` name.
 - [x] **failures** (`cases/failures_test.rb`) — exit-code matrix: auth (3),
   format/version (4), refuse-to-overwrite / missing-input / usage / bad-options (2).
 
@@ -80,7 +80,7 @@ ASCII armor (`-a/--armor`; decrypt/verify/info auto-detect).
 - [x] Armored output is 7-bit printable ASCII (only LF + `0x20..0x7e`).
 - [x] ⚠ Banner lines are exactly `-----BEGIN PALADIN MESSAGE-----` /
   `-----END PALADIN MESSAGE-----` (64-column base64 body, LF endings).
-- [x] Default armored output name is `<input>.paladin.asc` (DESIGN §6.5).
+- [x] Default armored output name is `<input>.aesc.asc` (DESIGN §6.5).
 - [x] `--info` on an armored file works (auto-detect).
 - [x] Armor to stdout (`-a -o -`) emits text; round-trips back through `-d -`.
 - [x] Armored multi-chunk file round-trips.
@@ -180,15 +180,18 @@ so future changes can't silently break old files. Goldens live in
 Committed **full-size** (~294 KiB) ciphertexts of `tests/fixtures/LOREM_IPSUM.txt`,
 minted by real tool runs with the fixed public password `password`:
 `LOREM_IPSUM.txt.aes` by the genuine AES Crypt CLI (`aescrypt 3.16.1`, Stream
-Format 2) and `LOREM_IPSUM.txt.paladin` by the paladin CLI at shipped defaults
-(aes-256-gcm, argon2id `memory=65536,time=3,parallelism=1`). Provenance and
-regeneration: `tests/fixtures/README.md`.
+Format 2) and `LOREM_IPSUM.txt.paladin` by the pre-rename paladin CLI at
+shipped defaults (aes-256-gcm, argon2id `memory=65536,time=3,parallelism=1`) —
+the same container format aesc writes, kept `.paladin`-named to lock
+legacy-extension support. Provenance and regeneration:
+`tests/fixtures/README.md`.
 
 - [x] `.aes` decrypts byte-for-byte to `LOREM_IPSUM.txt` — AES Crypt interop at
   scale (the committed Rust `.aes` fixtures are ≤ 3000 B; this is thousands of
   CBC blocks plus the final padding/HMAC path, through the real binary).
-- [x] `.paladin` decrypts byte-for-byte — a multi-chunk body at the shipped
-  DEFAULT KDF costs (the goldens use reduced costs and a small plaintext).
+- [x] `.paladin` decrypts byte-for-byte — a multi-chunk native body at the
+  shipped DEFAULT KDF costs (the goldens use reduced costs and a small
+  plaintext), and the legacy extension keeps decrypting.
 - [x] `--info` on each is **byte-exact** (no password): locks the aescrypt
   `created_by`/`extensions` fields and the defaults recorded in the container.
 - [x] `--verify` accepts both fixtures with the fixed password.
@@ -206,7 +209,7 @@ regeneration: `tests/fixtures/README.md`.
 - [x] **Quiet:** `-q` produces no stderr chatter on success.
 - [x] **`--help` / `--version`** → exit 0 with expected text.
 
-## advanced / optional — `cases/advanced_test.rb` (opt-in: `PALADIN_E2E_SLOW=1`) ✅
+## advanced / optional — `cases/advanced_test.rb` (opt-in: `AESC_E2E_SLOW=1`) ✅
 
 Skipped by default so the suite stays fast/deterministic.
 

@@ -23,20 +23,20 @@ class KdfTest < E2ETest
     env = { "PW" => DEFAULT_PASSWORD }
     KDFS.each do |kdf, (cost, params)|
       input  = write_input("p_#{kdf}.txt", "data for #{kdf}\n" * 8)
-      cipher = tmp("c_#{kdf}.paladin")
+      cipher = tmp("c_#{kdf}.aesc")
       out    = tmp("d_#{kdf}.txt")
 
-      enc = paladin("-e", input, "-o", cipher, "--kdf", kdf, *cost,
+      enc = aesc("-e", input, "-o", cipher, "--kdf", kdf, *cost,
                      "--password-env", "PW", env: env)
       assert_status enc, 0, "encrypt with #{kdf} failed: #{enc.stderr}"
 
-      info = paladin("-i", cipher)
+      info = aesc("-i", cipher)
       assert_status info, 0
       assert_includes info.stdout, "kdf: #{kdf}\n", "info should name #{kdf}"
       assert_includes info.stdout, "kdf_params: #{params}\n",
                       "info should echo #{kdf} cost params"
 
-      dec = paladin("-d", cipher, "-o", out, "--password-env", "PW", env: env)
+      dec = aesc("-d", cipher, "-o", out, "--password-env", "PW", env: env)
       assert_status dec, 0, "header-driven decrypt for #{kdf} failed"
       assert_identical input, out
     end
@@ -45,12 +45,12 @@ class KdfTest < E2ETest
   # The default KDF (no `--kdf`) is argon2id (DESIGN §12). Cheapest valid argon2
   # cost keeps it quick.
   def test_default_kdf_is_argon2id
-    cipher = tmp("def.paladin")
-    enc = paladin("-e", Paladin::LOREM, "-o", cipher,
+    cipher = tmp("def.aesc")
+    enc = aesc("-e", Aesc::LOREM, "-o", cipher,
                    "--argon2-memory", "8192", "--argon2-time", "1",
                    "--password-env", "PW", env: { "PW" => DEFAULT_PASSWORD })
     assert_status enc, 0
-    info = paladin("-i", cipher)
+    info = aesc("-i", cipher)
     assert_includes info.stdout, "kdf: argon2id\n"
   end
 
@@ -68,7 +68,7 @@ class KdfTest < E2ETest
       %w[--kdf scrypt --scrypt-log-n 21],              # > 20
     ]
     cases.each_with_index do |flags, i|
-      res = paladin("-e", Paladin::LOREM, "-o", tmp("o#{i}"),
+      res = aesc("-e", Aesc::LOREM, "-o", tmp("o#{i}"),
                      *flags, "--password-env", "PW", env: env)
       assert_status res, 2, "#{flags.join(' ')} should be a usage error"
     end
@@ -79,12 +79,12 @@ class KdfTest < E2ETest
   def test_cost_knob_requires_matching_kdf
     env = { "PW" => DEFAULT_PASSWORD }
 
-    no_pbkdf2 = paladin("-e", Paladin::LOREM, "-o", tmp("o1"),
+    no_pbkdf2 = aesc("-e", Aesc::LOREM, "-o", tmp("o1"),
                          "--pbkdf2-iterations", "20000",
                          "--password-env", "PW", env: env)
     assert_failure no_pbkdf2, 2, "requires --kdf pbkdf2"
 
-    no_scrypt = paladin("-e", Paladin::LOREM, "-o", tmp("o2"),
+    no_scrypt = aesc("-e", Aesc::LOREM, "-o", tmp("o2"),
                          "--scrypt-log-n", "12",
                          "--password-env", "PW", env: env)
     assert_failure no_scrypt, 2, "scrypt cost options require --kdf scrypt"
@@ -92,7 +92,7 @@ class KdfTest < E2ETest
 
   # An unknown KDF name is a usage error (exit 2).
   def test_invalid_kdf_name_is_usage_error
-    res = paladin("-e", Paladin::LOREM, "-o", tmp("o"), "--kdf", "bcrypt",
+    res = aesc("-e", Aesc::LOREM, "-o", tmp("o"), "--kdf", "bcrypt",
                    "--password-env", "PW", env: { "PW" => DEFAULT_PASSWORD })
     assert_failure res, 2, "unknown kdf"
   end

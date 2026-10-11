@@ -1,10 +1,10 @@
 ---
 name: bump-version
-description: Bump the paladin workspace version everywhere it is recorded (workspace Cargo.toml, internal path-dependency requirements, man page headers, Cargo.lock), verify nothing was missed, run the CI gate, and commit. Use when asked to bump, change, or set the project version, or to prepare a release. Argument: the new X.Y.Z version.
+description: Bump the aesc workspace version everywhere it is recorded (workspace Cargo.toml, internal path-dependency requirements, man page headers, Cargo.lock), verify nothing was missed, run the CI gate, and commit. Use when asked to bump, change, or set the project version, or to prepare a release. Argument: the new X.Y.Z version.
 argument-hint: <new-version X.Y.Z>
 ---
 
-# Bump the paladin version
+# Bump the aesc version
 
 Change the project version to `$ARGUMENTS` in every place it is recorded,
 verify nothing was missed, run the CI gate, and commit. If no version argument
@@ -30,16 +30,16 @@ Work through these in order, checking each off:
       checks against it.
 - [ ] **Internal path-dependency requirements** — five occurrences, all must
       be set to the new version exactly:
-  - `crates/paladin-cli/Cargo.toml` — `paladin-common`, `paladin-core`
-  - `crates/paladin-tui/Cargo.toml` — `paladin-common`, `paladin-core`
-  - `crates/paladin-gtk/Cargo.toml` — `paladin-core`
+  - `crates/aesc-cli/Cargo.toml` — `aesc-common`, `aesc-core`
+  - `crates/aesc-tui/Cargo.toml` — `aesc-common`, `aesc-core`
+  - `crates/aesc-gtk/Cargo.toml` — `aesc-core`
 
   These are caret semver requirements, so a stale value still resolves on a
   patch bump but breaks the build on a minor/major bump — update them on every
   bump regardless.
 - [ ] **Man page `.TH` headers** — first line of
-      `crates/paladin-cli/paladin.1` and `docs/paladin-tui.1`. Update the
-      source field `"paladin X.Y.Z"` (both intentionally say `paladin`, not
+      `crates/aesc-cli/aesc.1` and `docs/aesc-tui.1`. Update the
+      source field `"aesc X.Y.Z"` (both intentionally say `aesc`, not
       the binary name) and set the date field to today's date (YYYY-MM-DD).
 - [ ] **README install examples** — the `VERSION=X.Y.Z` lines in the
       "Installing a Release" section of `README.md` (one per package-manager
@@ -48,7 +48,7 @@ Work through these in order, checking each off:
 - [ ] **`Cargo.lock`** — refresh the workspace members' recorded versions with
       `cargo update --workspace` (touches only the workspace crates, not
       third-party dependencies). Commit the refreshed lockfile with the bump.
-- [ ] **AppStream metainfo (conditional)** — `data/org.paladin.Gtk.metainfo.xml`
+- [ ] **AppStream metainfo (conditional)** — `data/org.aesc.Gtk.metainfo.xml`
       currently has no `<releases>` section; if one has been added since, add
       an entry for the new version.
 

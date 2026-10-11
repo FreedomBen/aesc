@@ -1,4 +1,4 @@
-# nfpm config — paladin CLI package (.deb / .rpm).
+# nfpm config — aesc CLI package (.deb / .rpm).
 #
 # Built via `make package` (or package-deb / package-rpm), which exports the
 # VERSION and ARCH variables referenced below. To run nfpm by hand, set them
@@ -6,7 +6,16 @@
 #   VERSION=0.1.0 ARCH=amd64 nfpm package -f packaging/nfpm-cli.yaml -p deb -t dist
 #
 # nfpm reference: https://nfpm.goreleaser.com
-name: paladin
+name: aesc
+# The package was renamed from "paladin"; declaring the old name lets package
+# managers treat this as its successor (deb: Replaces/Conflicts/Provides,
+# rpm: Obsoletes/Conflicts/Provides).
+provides:
+  - paladin
+replaces:
+  - paladin
+conflicts:
+  - paladin
 arch: ${ARCH}
 platform: linux
 version: ${VERSION}
@@ -20,19 +29,19 @@ license: "MIT OR Apache-2.0"
 description: |
   Simple, safe symmetric file encryption (command-line interface).
 
-  paladin encrypts files with AES-256-GCM (or ChaCha20-Poly1305) and an
+  aesc encrypts files with AES-256-GCM (or ChaCha20-Poly1305) and an
   Argon2id-derived key. Encrypted files begin with a self-describing,
   authenticated header, so they decrypt with only the password or keyfile —
-  no out-of-band parameters. This package installs the `paladin` command
+  no out-of-band parameters. This package installs the `aesc` command
   and its man page.
 
 contents:
-  - src: ./target/release/paladin
-    dst: /usr/bin/paladin
+  - src: ./target/release/aesc
+    dst: /usr/bin/aesc
     file_info:
       mode: 0755
-  - src: ./crates/paladin-cli/paladin.1
-    dst: /usr/share/man/man1/paladin.1
+  - src: ./crates/aesc-cli/aesc.1
+    dst: /usr/share/man/man1/aesc.1
     file_info:
       mode: 0644
 

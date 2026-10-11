@@ -1,0 +1,19 @@
+[package]
+name = "aesc-common"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Terminal glue shared by the aesc CLI and TUI front-ends"
+
+[lints]
+workspace = true
+
+[dependencies]
+aesc-core = { path = "../aesc-core" }
+tempfile = "3.27.0"
+thiserror = "2.0.18"
+zeroize = "1.8.2"
+
+[dev-dependencies]

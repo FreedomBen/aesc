@@ -1,6 +1,6 @@
-# paladin — Implementation plan 03: TUI (`paladin-tui`)
+# aesc — Implementation plan 03: TUI (`aesc-tui`)
 
-**Status:** Implemented and tested. `paladin-core` and `paladin-common` are
+**Status:** Implemented and tested. `aesc-core` and `aesc-common` are
 complete (see
 [`IMPLEMENTATION_PLAN_01_CORE.md`](IMPLEMENTATION_PLAN_01_CORE.md)); the TUI
 builds only on their public APIs and adds no crypto or format logic. The
@@ -9,16 +9,16 @@ checklist below is fully checked off.
 **Target stack:** Rust 1.94+, [ratatui](https://ratatui.rs/) widgets/layout over
 [crossterm](https://docs.rs/crossterm) (raw mode, key + resize events).
 
-**Scope.** The `paladin-tui` binary — a single-screen, keyboard-driven
+**Scope.** The `aesc-tui` binary — a single-screen, keyboard-driven
 interactive form that gathers input, builds the same `Secret` /
 `EncryptOptions` every front-end uses, and calls the four core operations
-(`encrypt` / `decrypt` / `inspect` / `verify`). It reuses `paladin-common` for
+(`encrypt` / `decrypt` / `inspect` / `verify`). It reuses `aesc-common` for
 all terminal glue (path validation, output finalization, best-effort remove,
 exit-code mapping) and captures the password in its own masked field
 (DESIGN §7).
 
 **Depends on:** [`IMPLEMENTATION_PLAN_01_CORE.md`](IMPLEMENTATION_PLAN_01_CORE.md)
-— `paladin-core` and the `paladin-common` terminal glue.
+— `aesc-core` and the `aesc-common` terminal glue.
 
 **Sibling plans:** [`IMPLEMENTATION_PLAN_02_CLI.md`](IMPLEMENTATION_PLAN_02_CLI.md),
 [`IMPLEMENTATION_PLAN_04_GTK.md`](IMPLEMENTATION_PLAN_04_GTK.md).
@@ -31,7 +31,7 @@ The TUI is a *thin view*. It owns only medium-specific concerns and must not
 re-implement anything the core or common crate already provides.
 
 - **No crypto / no format logic.** All four operations go through
-  `paladin-core`; all path/clobber/remove logic goes through `paladin-common`.
+  `aesc-core`; all path/clobber/remove logic goes through `aesc-common`.
 - **No stdin/stdout streaming.** The terminal UI owns stdin/stdout, so every
   path field accepts filesystem paths only; a literal `-` is **rejected**
   (DESIGN §7.1). The CLI remains the only v1 front-end with `-` streaming.
@@ -50,21 +50,21 @@ re-implement anything the core or common crate already provides.
 
 ## 2. Crate layout & dependencies
 
-`paladin-tui` is currently an empty scaffold (`src/main.rs`). Pin versions with
+`aesc-tui` is currently an empty scaffold (`src/main.rs`). Pin versions with
 `cargo add` at implementation time (latest compatible; `Cargo.lock` records the
 resolved set).
 
 | Dependency                  | Purpose                                                        |
 | --------------------------- | ------------------------------------------------------------- |
-| `paladin-core` (path)      | The four operations, `EncryptOptions`, helpers, error type.   |
-| `paladin-common` (path)    | Path/stdin-reject validators, `OutputSink`, remove, exit map. |
+| `aesc-core` (path)      | The four operations, `EncryptOptions`, helpers, error type.   |
+| `aesc-common` (path)    | Path/stdin-reject validators, `OutputSink`, remove, exit map. |
 | `ratatui`                   | Widgets and layout (`Tabs`, `Gauge`, `Paragraph`, blocks).    |
 | `crossterm`                 | Terminal backend: raw mode, alternate screen, key/resize.     |
-| `clap` (derive)             | Optional launch path only (`paladin-tui <file>`).            |
+| `clap` (derive)             | Optional launch path only (`aesc-tui <file>`).            |
 | `zeroize`                   | `Zeroizing` buffer for the masked password (DESIGN §7.2).     |
 | `anyhow`                    | Error context in `main` startup/teardown paths.               |
 
-`tempfile` is pulled in transitively through `paladin-common` (temp-file
+`tempfile` is pulled in transitively through `aesc-common` (temp-file
 finalization) and directly under `[dev-dependencies]` for tests.
 
 Proposed internal modules (organization detail; DESIGN only mandates the
@@ -115,11 +115,11 @@ A single full-screen form (DESIGN §7.1). State lives in one `App` struct that
   as a field error rather than waiting for the run.
 - **Encrypt prefill:** when the input becomes valid (and output is not dirty),
   set output to `core::default_encrypt_output(input, armor)`. Re-derive when the
-  `--armor` toggle flips (`.paladin` ↔ `.paladin.asc`).
+  `--armor` toggle flips (`.aesc` ↔ `.aesc.asc`).
 - **Decrypt prefill:** stored names need the header, so on a valid input call
   `core::inspect(open_input(input))` and prefill with
   `core::default_decrypt_output(input, &header)`. If inspect fails (not a
-  paladin file / malformed), show a hint and leave the field for the user.
+  aesc file / malformed), show a hint and leave the field for the user.
 
 ### 4.2 Password & secret assembly (`options.rs`, pure + tested)
 
@@ -183,11 +183,11 @@ Mirror DESIGN §6.4 semantics in-UI, then hand bytes to the core:
 ### 4.6 Cancellation & errors
 
 - `Esc` during a run flips the cancel flag; the core observes it before/after
-  KDF work and between chunks, returns `PalError::Canceled`, the worker removes
+  KDF work and between chunks, returns `AescError::Canceled`, the worker removes
   any temp output, and the UI shows a **non-error** canceled state. A KDF call
   already running may finish first.
 - Error messages and the **process exit code** come from
-  `paladin-common` (`exit_code` / `AppError::exit_code`): per-operation
+  `aesc-common` (`exit_code` / `AppError::exit_code`): per-operation
   failures are shown in-UI without exiting, and the last **completed**
   operation's result maps to the exit status on a normal quit (success → 0, auth
   failure → 3, and so on). A user-acknowledged cancellation is non-error — it
@@ -244,22 +244,22 @@ logic into pure, unit-tested functions (`options.rs`, `field.rs`) and keep
   `FromStr`/`Display`.
 - **Line editor (`field.rs`):** insert/delete, cursor moves, Home/End, and
   masking render.
-- **Exit-code passthrough:** `PalError` variants map to the shared codes via
+- **Exit-code passthrough:** `AescError` variants map to the shared codes via
   `common::exit_code`; a user-acknowledged cancel leaves the exit status at the
   last completed operation's code (not 130) on a normal quit.
 
 Headless terminal-driver tests over a ratatui `TestBackend` are a stretch goal
 for the static layout; the four operations are already covered exhaustively in
-`paladin-core`, so the TUI tests focus on its own glue (DESIGN §10).
+`aesc-core`, so the TUI tests focus on its own glue (DESIGN §10).
 
 ---
 
 ## 7. Docs & packaging
 
-- `paladin-tui.1` man page (synopsis, key bindings, mode descriptions).
+- `aesc-tui.1` man page (synopsis, key bindings, mode descriptions).
 - README usage section + key-binding reference; note GTK/CLI differences
   (no `-` streaming, no password-file/env).
-- `cargo install -p paladin-tui` produces the `paladin-tui` binary.
+- `cargo install -p aesc-tui` produces the `aesc-tui` binary.
 
 ---
 
@@ -268,7 +268,7 @@ for the static layout; the four operations are already covered exhaustively in
 **Phase 0 — Scaffold**
 
 - [x] Add deps via `cargo add` (ratatui, crossterm, clap derive, zeroize,
-      anyhow) + `paladin-core`/`paladin-common` path deps.
+      anyhow) + `aesc-core`/`aesc-common` path deps.
 - [x] Terminal setup/teardown: raw mode + alternate screen, panic-safe restore,
       `main` mapping startup errors via `common`.
 - [x] App skeleton renders an empty form; `Esc`/`Ctrl-C` quit cleanly.
@@ -309,14 +309,14 @@ for the static layout; the four operations are already covered exhaustively in
 
 **Phase 6 — Errors & exit codes**
 
-- [x] Map `PalError`/`AppError` → messages + process exit via `common::exit_code`.
+- [x] Map `AescError`/`AppError` → messages + process exit via `common::exit_code`.
 - [x] Light unit tests of non-UI glue (`-` rejection, validation, mapping).
 
 **Phase 7 — Docs & packaging**
 
-- [x] `paladin-tui.1` man page.
+- [x] `aesc-tui.1` man page.
 - [x] README usage + key-binding reference.
-- [x] `cargo install -p paladin-tui`.
+- [x] `cargo install -p aesc-tui`.
 
 ---
 

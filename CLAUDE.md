@@ -22,11 +22,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-The Cargo workspace is scaffolded. The shared libraries — **`paladin-core`** (all
-crypto, file format, streaming, armor, pure helpers) and **`paladin-common`**
-(terminal glue) — and all three front-ends are implemented: the **`paladin`**
-command-line and **`paladin-tui`** terminal front-ends are implemented and
-tested, and the **`paladin-gtk`** desktop app is implemented too — it builds
+The Cargo workspace is scaffolded. The shared libraries — **`aesc-core`** (all
+crypto, file format, streaming, armor, pure helpers) and **`aesc-common`**
+(terminal glue) — and all three front-ends are implemented: the **`aesc`**
+command-line and **`aesc-tui`** terminal front-ends are implemented and
+tested, and the **`aesc-gtk`** desktop app is implemented too — it builds
 clean and its logic is unit-tested, though manual UI verification on a graphical
 session is still pending (see `docs/IMPLEMENTATION_PLAN_04_GTK.md`).
 Treat `docs/DESIGN.md` as the source of truth for how everything should behave.
@@ -39,7 +39,7 @@ Treat `docs/DESIGN.md` as the source of truth for how everything should behave.
   three front-ends all depend on it.
 - `TODO.md` is git-ignored and maintained by humans — do not rely on it.
 
-## What paladin is
+## What aesc is
 
 A simple, safe symmetric file-encryption tool: three thin front-ends over one
 shared core. Default cipher AES-256-GCM, default KDF Argon2id. Encrypted files
@@ -48,27 +48,27 @@ only the password/keyfile — no out-of-band parameters.
 
 ## Development commands
 
-This is a standard multi-crate Cargo workspace and it builds today: `paladin-core`,
-`paladin-common`, the `paladin` CLI, and the `paladin-tui` terminal app are
-implemented and tested, and the `paladin-gtk` desktop app is implemented as well
+This is a standard multi-crate Cargo workspace and it builds today: `aesc-core`,
+`aesc-common`, the `aesc` CLI, and the `aesc-tui` terminal app are
+implemented and tested, and the `aesc-gtk` desktop app is implemented as well
 — it builds clean and its logic is unit-tested, though manual UI verification on a
 graphical session is still pending (see `docs/IMPLEMENTATION_PLAN_04_GTK.md`).
 
-| Task                       | Command                                                                              |
-| -------------------------- | ------------------------------------------------------------------------------------ |
-| Build everything (debug)   | `cargo build`                                                                        |
-| Build release              | `cargo build --release`                                                              |
-| Run the CLI                | `cargo run -p paladin-cli -- -e file.txt` (package `paladin-cli`, binary `paladin`) |
-| Run the TUI                | `cargo run -p paladin-tui`                                                           |
-| Run the GTK app            | `cargo run -p paladin-gtk` (needs GTK4 + libadwaita dev libraries installed)        |
-| Test the whole workspace   | `cargo test`                                                                          |
-| Test one crate             | `cargo test -p paladin-core`                                                         |
-| Run a single test by name  | `cargo test -p paladin-core round_trip` (substring; add `-- --exact` / `-- --nocapture`) |
-| Lint                       | `cargo clippy --all-targets --all-features`                                          |
-| Format                     | `cargo fmt` (check-only: `cargo fmt --check`)                                         |
+| Task                      | Command                                                                               |
+|---------------------------|---------------------------------------------------------------------------------------|
+| Build everything (debug)  | `cargo build`                                                                         |
+| Build release             | `cargo build --release`                                                               |
+| Run the CLI               | `cargo run -p aesc-cli -- -e file.txt` (package `aesc-cli`, binary `aesc`)            |
+| Run the TUI               | `cargo run -p aesc-tui`                                                               |
+| Run the GTK app           | `cargo run -p aesc-gtk` (needs GTK4 + libadwaita dev libraries installed)             |
+| Test the whole workspace  | `cargo test`                                                                          |
+| Test one crate            | `cargo test -p aesc-core`                                                             |
+| Run a single test by name | `cargo test -p aesc-core round_trip` (substring; add `-- --exact` / `-- --nocapture`) |
+| Lint                      | `cargo clippy --all-targets --all-features`                                           |
+| Format                    | `cargo fmt` (check-only: `cargo fmt --check`)                                         |
 
-Gotcha: the CLI lives in package **`paladin-cli`** but produces a binary named
-**`paladin`** — use `-p paladin-cli` (or `--bin paladin`) to run it.
+Gotcha: the CLI lives in package **`aesc-cli`** but produces a binary named
+**`aesc`** — use `-p aesc-cli` (or `--bin aesc`) to run it.
 
 ## Continuous integration
 
@@ -92,14 +92,14 @@ sweep and `make ci`, and commits.
 
 ### One core, thin front-ends (the central rule)
 
-A Cargo workspace of five crates. **`paladin-core` does all the work** — every
+A Cargo workspace of five crates. **`aesc-core` does all the work** — every
 front-end is just a view that gathers input, hands it to the core, and renders
 the result. This keeps the security-critical code small, testable, and identical
 across front-ends.
 
 The core's hard boundary — when implementing, never cross it:
 
-> `paladin-core` never reads argv, never prompts, never touches the filesystem,
+> `aesc-core` never reads argv, never prompts, never touches the filesystem,
 > never decides whether to overwrite, and never exits the process. It takes
 > generic `Read`/`Write` and reports progress through an `on_progress` callback
 > that returns `ControlFlow::Break` to cancel.
@@ -110,13 +110,13 @@ errors, exit codes — lives in the front-ends.
 
 ### Crates & dependency direction
 
-| Crate            | Kind             | Responsibility                                                                                                                                |
-| ---------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `paladin-core`  | lib              | All crypto, KDF, file format/header, STREAM chunking, ASCII armor, and pure helpers (default output paths, cipher/KDF name parsing). Holds the unit/round-trip/tamper/KAT tests. |
-| `paladin-common`| lib              | Terminal glue shared by CLI + TUI: path-or-stdin I/O, clobber check, secure remove, password-source resolution, exit-code mapping. Depends only on core + std. |
-| `paladin-cli`   | bin `paladin`   | clap arg parsing; password resolution; calls core.                                                                                            |
-| `paladin-tui`   | bin `paladin-tui` | ratatui + crossterm interactive form. Reuses `paladin-common`.                                                                             |
-| `paladin-gtk`   | bin `paladin-gtk` | relm4 (gtk4-rs) + libadwaita desktop app. **Does not use `paladin-common`** — relies on core + GTK-native file handling.                   |
+| Crate         | Kind           | Responsibility                                                                                                                                                                   |
+|---------------|----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `aesc-core`   | lib            | All crypto, KDF, file format/header, STREAM chunking, ASCII armor, and pure helpers (default output paths, cipher/KDF name parsing). Holds the unit/round-trip/tamper/KAT tests. |
+| `aesc-common` | lib            | Terminal glue shared by CLI + TUI: path-or-stdin I/O, clobber check, secure remove, password-source resolution, exit-code mapping. Depends only on core + std.                   |
+| `aesc-cli`    | bin `aesc`     | clap arg parsing; password resolution; calls core.                                                                                                                               |
+| `aesc-tui`    | bin `aesc-tui` | ratatui + crossterm interactive form. Reuses `aesc-common`.                                                                                                                      |
+| `aesc-gtk`    | bin `aesc-gtk` | relm4 (gtk4-rs) + libadwaita desktop app. **Does not use `aesc-common`** — relies on core + GTK-native file handling.                                                            |
 
 Dependency direction: `common`/`cli`/`tui`/`gtk` → `core`; `cli`/`tui` → `common`.
 `gtk` deliberately skips `common`.
@@ -148,7 +148,7 @@ drop) and `EncryptOptions`. Output paths come from the pure helpers
 - A failed auth tag is reported as a single condition ("wrong password or
   corrupted/tampered file") — the two are intentionally indistinguishable.
 - Unknown `version`/`cipher_id`/`kdf_id` or any reserved flag bit → reject with
-  exit code 4; paladin never guesses at an unrecognized format.
+  exit code 4; aesc never guesses at an unrecognized format.
 
 ### Front-end concurrency pattern (TUI & GTK)
 
@@ -160,14 +160,14 @@ moved into the worker inside a zeroizing buffer.
 
 ## Conventions
 
-- **Tests accompany every code change.** Most coverage lives in `paladin-core`
+- **Tests accompany every code change.** Most coverage lives in `aesc-core`
   (round-trip across sizes 0/1/chunk±1/large; tamper/truncate/reorder; KDF
   determinism; committed KAT vectors). The CLI gets `assert_cmd` integration
   tests; GTK relies on manual verification plus the shared core tests.
 - **Security-affecting changes:** state the implications and confirm before
   implementing, and add tests that verify the integrity property.
 - Exit codes: 0 ok · 1 general/IO · 2 usage · 3 auth failure · 4 unsupported
-  format/version · 130 canceled — mapped from `PalError` in `paladin-common`,
+  format/version · 130 canceled — mapped from `AescError` in `aesc-common`,
   never classified in the front-ends.
 - Dependency versions are pinned via `cargo add` at scaffolding time.
 
@@ -228,8 +228,8 @@ When spawning subagents (Agent/Task tool), the routing block is automatically in
 
 ## ctx commands
 
-| Command | Action |
-|---------|--------|
-| `ctx stats` | Call the `ctx_stats` MCP tool and display the full output verbatim |
-| `ctx doctor` | Call the `ctx_doctor` MCP tool, run the returned shell command, display as checklist |
+| Command       | Action                                                                                |
+|---------------|---------------------------------------------------------------------------------------|
+| `ctx stats`   | Call the `ctx_stats` MCP tool and display the full output verbatim                    |
+| `ctx doctor`  | Call the `ctx_doctor` MCP tool, run the returned shell command, display as checklist  |
 | `ctx upgrade` | Call the `ctx_upgrade` MCP tool, run the returned shell command, display as checklist |

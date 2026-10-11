@@ -1,4 +1,4 @@
-# paladin
+# aesc
 
 [![CI](https://github.com/FreedomBen/paladin/actions/workflows/ci.yml/badge.svg)](https://github.com/FreedomBen/paladin/actions/workflows/ci.yml)
 
@@ -8,11 +8,16 @@ shared core. The default cipher is **AES-256-GCM** and the default KDF is
 so they can be identified and decrypted with only the password (or keyfile) — no
 out-of-band parameters.
 
+> **Formerly paladin.** The project was renamed to **aesc**; the on-disk format
+> is unchanged, so every file written by paladin decrypts with aesc (and vice
+> versa). New files get the `.aesc` extension, and the legacy `.paladin` suffix
+> stays recognized when deriving decrypt output names.
+
 > **Project status.** All three front-ends are implemented. The shared
-> libraries — `paladin-core` (all crypto, file format, streaming, helpers) and
-> `paladin-common` (terminal glue) — and the `paladin` command-line and
-> `paladin-tui` terminal front-ends are implemented and tested. The
-> `paladin-gtk` desktop app is implemented; it builds clean and its logic is
+> libraries — `aesc-core` (all crypto, file format, streaming, helpers) and
+> `aesc-common` (terminal glue) — and the `aesc` command-line and
+> `aesc-tui` terminal front-ends are implemented and tested. The
+> `aesc-gtk` desktop app is implemented; it builds clean and its logic is
 > unit-tested, but manual UI verification on a graphical session is still
 > pending. [`DESIGN.md`](docs/DESIGN.md) is the authoritative specification.
 
@@ -31,28 +36,28 @@ out-of-band parameters.
 - **AES Crypt read interop**: `-d`, `--verify`, and `-i` also decrypt, verify,
   and inspect foreign [AES Crypt](https://www.aescrypt.com/) (`.aes`) files
   (Stream Format 1 and 2), detected automatically. Encryption always writes
-  paladin's own format; re-encrypt a decrypted `.aes` file to migrate it.
+  aesc's own format; re-encrypt a decrypted `.aes` file to migrate it.
 - **In-app encrypted text editing (GTK)**: the desktop app's Edit tab opens a
   small encrypted text file (up to 8 MiB of UTF-8) straight into an editor
   window — plaintext never touches disk — and every save is a complete fresh
   encrypt that preserves the file's cipher, KDF parameters, and armor. Legacy
-  `.aes` files open too and are migrated to paladin's format on save after an
+  `.aes` files open too and are migrated to aesc's format on save after an
   explicit confirmation, and a "New note" button creates encrypted notes from
   scratch.
 
 ## Architecture
 
-A Cargo workspace of five crates. **`paladin-core` does all the work**; each
+A Cargo workspace of five crates. **`aesc-core` does all the work**; each
 front-end is a thin view that gathers input, hands it to the core, and renders
 the result.
 
-| Crate             | Kind               | Responsibility                                                                                 |
-| ----------------- | ------------------ | ---------------------------------------------------------------------------------------------- |
-| `paladin-core`   | lib                | All crypto, KDF, file format/header, STREAM chunking, ASCII armor, and pure helpers.            |
-| `paladin-common` | lib                | Terminal glue shared by the CLI + TUI: path-or-stdin I/O, clobber check, secure remove, password resolution, exit-code mapping. |
-| `paladin-cli`    | bin `paladin`     | clap argument parsing; password resolution; calls the core.                                     |
-| `paladin-tui`    | bin `paladin-tui` | ratatui + crossterm interactive form. Reuses `paladin-common`.                                 |
-| `paladin-gtk`    | bin `paladin-gtk` | relm4 (gtk4-rs) + libadwaita desktop app with an in-app encrypted text editor.                 |
+| Crate         | Kind           | Responsibility                                                                                                                  |
+|---------------|----------------|---------------------------------------------------------------------------------------------------------------------------------|
+| `aesc-core`   | lib            | All crypto, KDF, file format/header, STREAM chunking, ASCII armor, and pure helpers.                                            |
+| `aesc-common` | lib            | Terminal glue shared by the CLI + TUI: path-or-stdin I/O, clobber check, secure remove, password resolution, exit-code mapping. |
+| `aesc-cli`    | bin `aesc`     | clap argument parsing; password resolution; calls the core.                                                                     |
+| `aesc-tui`    | bin `aesc-tui` | ratatui + crossterm interactive form. Reuses `aesc-common`.                                                                     |
+| `aesc-gtk`    | bin `aesc-gtk` | relm4 (gtk4-rs) + libadwaita desktop app with an in-app encrypted text editor.                                                  |
 
 The core never reads argv, never prompts, never touches the filesystem on its
 own, never decides whether to overwrite, and never exits the process. It takes
@@ -65,11 +70,11 @@ Every tagged version publishes prebuilt Linux x86-64 packages on the
 and one `.rpm` per front-end, plus a `SHA256SUMS` file. Installing a package
 needs no Rust toolchain; each one ships the binary and its extras:
 
-| Package        | Installs                                                    |
-| -------------- | ----------------------------------------------------------- |
-| `paladin`     | The `paladin` CLI and its man page                         |
-| `paladin-tui` | The `paladin-tui` terminal app and its man page            |
-| `paladin-gtk` | The `paladin-gtk` desktop app, `.desktop` entry, and icons |
+| Package    | Installs                                                |
+|------------|---------------------------------------------------------|
+| `aesc`     | The `aesc` CLI and its man page                         |
+| `aesc-tui` | The `aesc-tui` terminal app and its man page            |
+| `aesc-gtk` | The `aesc-gtk` desktop app, `.desktop` entry, and icons |
 
 Download the package for your distribution with `curl`, verify it against
 `SHA256SUMS`, and install it with your package manager. Set `VERSION` to the
@@ -80,10 +85,10 @@ release you want (the newest is shown at the top of the releases page):
 ```sh
 VERSION=0.2.1
 BASE="https://github.com/FreedomBen/paladin/releases/download/v${VERSION}"
-curl -LO "${BASE}/paladin_${VERSION}-1_amd64.deb"
+curl -LO "${BASE}/aesc_${VERSION}-1_amd64.deb"
 curl -LO "${BASE}/SHA256SUMS"
 sha256sum --check --ignore-missing SHA256SUMS
-sudo apt install "./paladin_${VERSION}-1_amd64.deb"
+sudo apt install "./aesc_${VERSION}-1_amd64.deb"
 ```
 
 **Fedora / RHEL (.rpm):**
@@ -91,18 +96,18 @@ sudo apt install "./paladin_${VERSION}-1_amd64.deb"
 ```sh
 VERSION=0.2.1
 BASE="https://github.com/FreedomBen/paladin/releases/download/v${VERSION}"
-curl -LO "${BASE}/paladin-${VERSION}-1.x86_64.rpm"
+curl -LO "${BASE}/aesc-${VERSION}-1.x86_64.rpm"
 curl -LO "${BASE}/SHA256SUMS"
 sha256sum --check --ignore-missing SHA256SUMS
-sudo dnf install "./paladin-${VERSION}-1.x86_64.rpm"
+sudo dnf install "./aesc-${VERSION}-1.x86_64.rpm"
 ```
 
 Prefer `wget`? Use `wget "${BASE}/<file>"` in place of `curl -LO "${BASE}/<file>"`.
 
 Asset names follow nfpm's conventions — `<package>_<version>-1_amd64.deb` and
 `<package>-<version>-1.x86_64.rpm`, where `-1` is the package release number.
-Substitute `paladin-tui` or `paladin-gtk` for `paladin` in the commands above
-to install the other front-ends; installing `paladin-gtk` pulls in its GTK 4
+Substitute `aesc-tui` or `aesc-gtk` for `aesc` in the commands above
+to install the other front-ends; installing `aesc-gtk` pulls in its GTK 4
 and libadwaita runtime dependencies automatically. Remove a package again with
 `sudo apt remove <package>` or `sudo dnf remove <package>`.
 
@@ -111,13 +116,13 @@ architectures, build from source instead — see the next section.
 
 ## Building from source
 
-`paladin` builds with a standard Rust toolchain and Cargo. The `paladin` CLI
-and `paladin-tui` terminal app are pure Rust and need no system libraries — only
-the `paladin-gtk` desktop app needs the GTK4 + libadwaita development packages.
+`aesc` builds with a standard Rust toolchain and Cargo. The `aesc` CLI
+and `aesc-tui` terminal app are pure Rust and need no system libraries — only
+the `aesc-gtk` desktop app needs the GTK4 + libadwaita development packages.
 
 ### 1. Install the Rust toolchain
 
-paladin targets a **minimum supported Rust version (MSRV) of 1.94** (edition
+aesc targets a **minimum supported Rust version (MSRV) of 1.94** (edition
 2021); no `rust-toolchain.toml` is pinned, so current stable works. The easiest
 way to get it is [`rustup`](https://rustup.rs), the official Rust toolchain
 installer and version manager:
@@ -141,7 +146,7 @@ Once installed, `rustup` is how you keep Rust current and manage toolchains and
 components. The commands you are most likely to need for this project:
 
 | Command                               | What it does                                      |
-| ------------------------------------- | ------------------------------------------------- |
+|---------------------------------------|---------------------------------------------------|
 | `rustup show`                         | Show the active toolchain and its versions        |
 | `rustup update`                       | Update all installed toolchains and rustup itself |
 | `rustup toolchain list`               | List the installed toolchains                     |
@@ -159,7 +164,7 @@ chose the minimal profile at install time, add the lint and format tools with
 
 ### 2. Install system dependencies (GTK app only)
 
-Skip this step unless you are building `paladin-gtk`. The desktop app links
+Skip this step unless you are building `aesc-gtk`. The desktop app links
 against **GTK4** and **libadwaita**, so it needs their development packages plus
 a C compiler and `pkg-config` to locate them:
 
@@ -174,8 +179,8 @@ for the C compiler and linker.
 ### 3. Get the source
 
 ```sh
-git clone https://github.com/FreedomBen/paladin.git
-cd paladin
+git clone https://github.com/FreedomBen/paladin.git aesc
+cd aesc
 ```
 
 ### 4. Build
@@ -185,13 +190,13 @@ cargo build                   # debug build of the whole workspace
 cargo build --release         # optimized build → target/release/
 ```
 
-Build a single front-end with `-p`. Note the CLI package is **`paladin-cli`**
-but its binary is named **`paladin`**:
+Build a single front-end with `-p`. Note the CLI package is **`aesc-cli`**
+but its binary is named **`aesc`**:
 
 ```sh
-cargo build -p paladin-cli   # CLI only      (binary: paladin)
-cargo build -p paladin-tui   # terminal app only
-cargo build -p paladin-gtk   # desktop app only (needs the deps from step 2)
+cargo build -p aesc-cli   # CLI only      (binary: aesc)
+cargo build -p aesc-tui   # terminal app only
+cargo build -p aesc-gtk   # desktop app only (needs the deps from step 2)
 ```
 
 ### 5. Run the tests
@@ -200,19 +205,19 @@ Confirm the build with the workspace test suite:
 
 ```sh
 cargo test                               # the whole workspace
-cargo test -p paladin-core              # one crate
-cargo test -p paladin-core round_trip   # a single test by name (substring match)
+cargo test -p aesc-core              # one crate
+cargo test -p aesc-core round_trip   # a single test by name (substring match)
 ```
 
 ### 6. Build, test, and lint commands
 
 | Task                      | Command                                       |
-| ------------------------- | --------------------------------------------- |
+|---------------------------|-----------------------------------------------|
 | Build everything (debug)  | `cargo build`                                 |
 | Build release             | `cargo build --release`                       |
 | Test the whole workspace  | `cargo test`                                  |
-| Test one crate            | `cargo test -p paladin-core`                 |
-| Run a single test by name | `cargo test -p paladin-core round_trip`      |
+| Test one crate            | `cargo test -p aesc-core`                     |
+| Run a single test by name | `cargo test -p aesc-core round_trip`          |
 | Lint                      | `cargo clippy --all-targets --all-features`   |
 | Format                    | `cargo fmt` (check only: `cargo fmt --check`) |
 
@@ -227,9 +232,9 @@ Install any front-end into Cargo's binary directory (`~/.cargo/bin`, which
 `rustup` puts on your `PATH`):
 
 ```sh
-cargo install --path crates/paladin-cli    # the `paladin` CLI
-cargo install --path crates/paladin-tui    # the terminal app
-cargo install --path crates/paladin-gtk    # the desktop app (needs step 2)
+cargo install --path crates/aesc-cli    # the `aesc` CLI
+cargo install --path crates/aesc-tui    # the terminal app
+cargo install --path crates/aesc-gtk    # the desktop app (needs step 2)
 ```
 
 Or use the Makefile to install a binary **and** its packaged extras — a man page
@@ -238,9 +243,9 @@ under a prefix (default `/usr/local`; override with `PREFIX=`, stage with
 `DESTDIR=`):
 
 ```sh
-make install                       # paladin CLI + man page
-make install-tui                   # paladin-tui + man page
-make install-gtk                   # paladin-gtk + .desktop + icons + metainfo
+make install                       # aesc CLI + man page
+make install-tui                   # aesc-tui + man page
+make install-gtk                   # aesc-gtk + .desktop + icons + metainfo
 make install PREFIX="$HOME/.local"
 ```
 
@@ -254,14 +259,14 @@ binary in more detail.
 with [nfpm](https://nfpm.goreleaser.com) — one package per binary, so installing
 the CLI on a headless box never pulls in the GTK stack:
 
-| Package        | Installs                                               | Runtime dependencies |
-| -------------- | ----------------------------------------------------- | -------------------- |
-| `paladin`     | `paladin` CLI and its man page                         | libc                 |
-| `paladin-tui` | `paladin-tui` and its man page                         | libc                 |
-| `paladin-gtk` | `paladin-gtk`, `.desktop` entry, icons, AppStream data | GTK 4, libadwaita    |
+| Package    | Installs                                            | Runtime dependencies |
+|------------|-----------------------------------------------------|----------------------|
+| `aesc`     | `aesc` CLI and its man page                         | libc                 |
+| `aesc-tui` | `aesc-tui` and its man page                         | libc                 |
+| `aesc-gtk` | `aesc-gtk`, `.desktop` entry, icons, AppStream data | GTK 4, libadwaita    |
 
 First install nfpm (a single Go binary — it is **not** a build dependency of
-paladin itself):
+aesc itself):
 
 ```sh
 go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
@@ -279,7 +284,7 @@ make package-rpm    # only the .rpm packages
 `VERSION` is read from the workspace `Cargo.toml`. Override the target
 architecture with `ARCH=` (nfpm names — `amd64`, `arm64`) and the output
 directory with `DISTDIR=`; the nfpm configs live in `packaging/`. Building the
-`paladin-gtk` package needs the GTK build dependencies from step 2.
+`aesc-gtk` package needs the GTK build dependencies from step 2.
 
 The same packages are also built in CI. Every push and pull request runs the
 CI workflow (`.github/workflows/ci.yml`), which runs the full test gate and
@@ -293,45 +298,45 @@ entirely and grab the packages from the
 
 ## Command-line usage
 
-Install the `paladin` binary with Cargo:
+Install the `aesc` binary with Cargo:
 
 ```sh
-cargo install --path crates/paladin-cli
+cargo install --path crates/aesc-cli
 ```
 
 Or install the binary **and** its man page under a prefix (default
 `/usr/local`, override with `PREFIX=`, stage with `DESTDIR=`):
 
 ```sh
-make install                      # → /usr/local/bin/paladin + man page
+make install                      # → /usr/local/bin/aesc + man page
 make install PREFIX="$HOME/.local"
 make uninstall                    # remove both again
 ```
 
-`paladin` takes exactly one mode (`-e`/`-d`/`-i`/`--verify`) and one `<FILE>`
+`aesc` takes exactly one mode (`-e`/`-d`/`-i`/`--verify`) and one `<FILE>`
 (`-` means stdin). With no password source it prompts interactively (no echo);
 non-interactively, supply `-p`, `--password-file`, `--password-env`, and/or a
-keyfile (`-k`). See `paladin --help` for every option and
+keyfile (`-k`). See `aesc --help` for every option and
 [`DESIGN.md`](docs/DESIGN.md) §6 for the full specification.
 
 ```sh
-paladin -e report.pdf                      # → report.pdf.paladin (prompts for a password)
-paladin -e report.pdf -o - --armor > out   # armored, written to stdout
-paladin -d report.pdf.paladin             # → report.pdf (or the stored/derived name)
-paladin -i report.pdf.paladin             # print unauthenticated header metadata
-paladin --verify report.pdf.paladin       # check integrity + password, writing nothing
-printf 'secret' | PW=passphrase paladin -e - -o s.paladin --password-env PW
-paladin -e vault.tar -k usb.key --no-password   # keyfile-only
-paladin -e big.iso -c chacha20-poly1305 --remove
-paladin -d secret.txt.aes                       # decrypt a foreign AES Crypt file → secret.txt
+aesc -e report.pdf                      # → report.pdf.aesc (prompts for a password)
+aesc -e report.pdf -o - --armor > out   # armored, written to stdout
+aesc -d report.pdf.aesc             # → report.pdf (or the stored/derived name)
+aesc -i report.pdf.aesc             # print unauthenticated header metadata
+aesc --verify report.pdf.aesc       # check integrity + password, writing nothing
+printf 'secret' | PW=passphrase aesc -e - -o s.aesc --password-env PW
+aesc -e vault.tar -k usb.key --no-password   # keyfile-only
+aesc -e big.iso -c chacha20-poly1305 --remove
+aesc -d secret.txt.aes                       # decrypt a foreign AES Crypt file → secret.txt
 ```
 
 `-d`, `--verify`, and `-i` auto-detect foreign AES Crypt (`.aes`) files (Stream
 Format 1 and 2). Their header is unauthenticated, so `-i` reports
-`authenticated: false`; paladin never *writes* AES Crypt, so to migrate a file,
+`authenticated: false`; aesc never *writes* AES Crypt, so to migrate a file,
 decrypt it and re-encrypt with `-e`. An AES Crypt key file may be passed with
 `--password-file` only when it is valid UTF-8 text (`-k` and `--no-password`
-apply to paladin files only).
+apply to aesc files only).
 
 Existing output files are refused unless `-f/--force` is given; on Unix the
 output is created with mode `0600`. Exit codes: `0` success, `1` I/O or general
@@ -340,30 +345,30 @@ format, `130` canceled.
 
 ## Terminal usage
 
-`paladin-tui` is a full-screen, keyboard-driven terminal front-end over the same
+`aesc-tui` is a full-screen, keyboard-driven terminal front-end over the same
 core as the CLI, so the file format, cryptography, and defaults are identical. It
 presents one form with four mode tabs — Encrypt, Decrypt, Info, and Verify — and
 runs each operation off the UI thread with a live progress gauge.
 
-Install the `paladin-tui` binary with Cargo, or install the binary **and** its
+Install the `aesc-tui` binary with Cargo, or install the binary **and** its
 man page under a prefix with the Makefile:
 
 ```sh
-cargo install --path crates/paladin-tui
-make install-tui                       # → /usr/local/bin/paladin-tui + man page
+cargo install --path crates/aesc-tui
+make install-tui                       # → /usr/local/bin/aesc-tui + man page
 make install-tui PREFIX="$HOME/.local"
 ```
 
 Launch it (optionally prefilling the input-path field with a file):
 
 ```sh
-paladin-tui                 # start with an empty form
-paladin-tui report.pdf      # prefill the input path
+aesc-tui                 # start with an empty form
+aesc-tui report.pdf      # prefill the input path
 ```
 
 Switch modes with the `←`/`→` keys while the tabs are focused; each mode shows
 only the fields it needs (Encrypt adds a confirm field; Info reads no password).
-The output path is prefilled automatically — `input.paladin` (or `.paladin.asc`
+The output path is prefilled automatically — `input.aesc` (or `.aesc.asc`
 with armor) on encrypt, and the stored/derived name on decrypt — but a manual
 edit is never overwritten. An **Advanced** pane (collapsible) holds the
 Encrypt-only cipher and KDF selectors with the selected KDF's cost knobs, the
@@ -375,9 +380,9 @@ file".
 ### Key bindings
 
 | Key                 | Action                                                               |
-| ------------------- | -------------------------------------------------------------------- |
-| `Tab` / `Shift-Tab` | Move focus between fields                                             |
-| `←` / `→`           | Switch the mode tab (when tabs are focused) or change a selector      |
+|---------------------|----------------------------------------------------------------------|
+| `Tab` / `Shift-Tab` | Move focus between fields                                            |
+| `←` / `→`           | Switch the mode tab (when tabs are focused) or change a selector     |
 | `Space`             | Toggle the focused checkbox / expander                               |
 | `Enter`             | Run the selected operation                                           |
 | `Esc`               | Cancel a running operation, or quit when idle                        |
@@ -393,7 +398,7 @@ file".
 
 ## Desktop (GTK) usage
 
-`paladin-gtk` is a libadwaita desktop front-end (relm4 + gtk4-rs) over the same
+`aesc-gtk` is a libadwaita desktop front-end (relm4 + gtk4-rs) over the same
 core as the CLI and TUI, so the file format, cryptography, and defaults are
 identical. It is implemented; it builds clean and its pure logic is unit-tested,
 but manual UI verification on a graphical session is still pending.
@@ -406,7 +411,7 @@ and Verify — sharing one form whose rows show and hide per mode. It offers:
 
 - input and output file pickers via `gtk::FileDialog`, plus drag-and-drop of an
   input file onto the window;
-- output prefill — `input.paladin` (or `.paladin.asc` with armor) on encrypt,
+- output prefill — `input.aesc` (or `.aesc.asc` with armor) on encrypt,
   and the stored/derived name on decrypt — that never clobbers a manual edit;
 - password and confirm (Encrypt) entries, a keyfile-only toggle, and a keyfile
   chooser;
@@ -424,10 +429,10 @@ Run it from the workspace, or install the binary together with its `.desktop`
 entry, icons, and AppStream metainfo:
 
 ```sh
-cargo run -p paladin-gtk                 # run from the source tree
+cargo run -p aesc-gtk                 # run from the source tree
 make run-gtk                              # same, via the Makefile
 
-cargo install --path crates/paladin-gtk  # binary only
+cargo install --path crates/aesc-gtk  # binary only
 make install-gtk                          # binary + .desktop + icons + metainfo
 make install-gtk PREFIX="$HOME/.local"
 make uninstall-gtk                        # remove them again
@@ -445,13 +450,13 @@ provided) is a possible future distribution path.
 
 ## Library usage
 
-`paladin-core` exposes four operations — `encrypt`, `decrypt`, `inspect`
+`aesc-core` exposes four operations — `encrypt`, `decrypt`, `inspect`
 (unauthenticated header metadata, no secret needed), and `verify`
 (decrypt-and-discard) — each over generic `Read`/`Write`:
 
 ```rust
 use std::ops::ControlFlow;
-use paladin_core::{decrypt, encrypt, EncryptOptions, Progress, Secret};
+use aesc_core::{decrypt, encrypt, EncryptOptions, Progress, Secret};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Password and/or keyfile material, zeroized on drop.
@@ -490,7 +495,9 @@ associated data) followed by a **STREAM**-chunked body; all integers are
 big-endian. The entire serialized header is the associated data for chunk 0, so
 the cipher, KDF, parameters, and optional filename cannot be tampered with
 (downgrade-resistant). With `--armor`, the binary container is base64-wrapped in
-PEM-style `-----BEGIN/END PALADIN MESSAGE-----` markers.
+PEM-style `-----BEGIN/END PALADIN MESSAGE-----` markers (the marker text keeps
+the project's former name — it is part of the file format, so armored files
+stay interchangeable with pre-rename builds).
 
 - **Ciphers:** AES-256-GCM (default) or ChaCha20-Poly1305.
 - **KDFs:** Argon2id (default), scrypt, or PBKDF2-HMAC-SHA256.
