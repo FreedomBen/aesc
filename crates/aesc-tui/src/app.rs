@@ -959,16 +959,20 @@ mod tests {
         p.to_string_lossy().into_owned()
     }
 
-    /// Drive `pump` until the worker finishes (operations here are tiny).
+    /// Drive `pump` until the worker finishes. Waits on a wall-clock deadline
+    /// (not an iteration count): the cancellation test runs a real Argon2id
+    /// derivation, and a loaded CI runner can starve the worker thread long
+    /// enough to exhaust any yield-spin budget.
     fn pump_until_idle(app: &mut App) {
-        for _ in 0..1_000_000 {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        while std::time::Instant::now() < deadline {
             app.pump();
             if !app.is_running() {
                 return;
             }
-            std::thread::yield_now();
+            std::thread::sleep(std::time::Duration::from_millis(1));
         }
-        panic!("worker did not finish");
+        panic!("worker did not finish within 60s");
     }
 
     /// Write a small encrypted file with a cheap KDF, bypassing the worker.
