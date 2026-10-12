@@ -86,7 +86,7 @@ release you want (the newest is shown at the top of the releases page):
 **Debian / Ubuntu (.deb):**
 
 ```sh
-VERSION=0.2.1
+VERSION=0.3.0
 BASE="https://github.com/FreedomBen/paladin/releases/download/v${VERSION}"
 curl -LO "${BASE}/aesc_${VERSION}-1_amd64.deb"
 curl -LO "${BASE}/SHA256SUMS"
@@ -97,7 +97,7 @@ sudo apt install "./aesc_${VERSION}-1_amd64.deb"
 **Fedora / RHEL (.rpm):**
 
 ```sh
-VERSION=0.2.1
+VERSION=0.3.0
 BASE="https://github.com/FreedomBen/paladin/releases/download/v${VERSION}"
 curl -LO "${BASE}/aesc-${VERSION}-1.x86_64.rpm"
 curl -LO "${BASE}/SHA256SUMS"

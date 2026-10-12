@@ -15,8 +15,8 @@ anyhow = "1.0.102"
 clap = { version = "4.6.1", features = ["derive"] }
 crossterm = "0.29.0"
 ratatui = "0.30.0"
-aesc-common = { version = "0.2.1", path = "../aesc-common" }
-aesc-core = { version = "0.2.1", path = "../aesc-core" }
+aesc-common = { version = "0.3.0", path = "../aesc-common" }
+aesc-core = { version = "0.3.0", path = "../aesc-core" }
 zeroize = "1.8.2"
 
 [dev-dependencies]
