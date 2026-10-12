@@ -25,7 +25,7 @@ land. See `README.md` for how to run the suite and add a case.
 **Exit codes** (`aesc-common/src/error.rs`)
 
 | Code | Meaning            | Example trigger                                                        |
-|-----:|--------------------|------------------------------------------------------------------------|
+|------|--------------------|------------------------------------------------------------------------|
 | 0    | success            | any successful operation                                               |
 | 1    | general / I/O      | output directory missing, write failure, unreadable input              |
 | 2    | usage              | bad flags, refuse-to-overwrite, missing/non-regular input, bad options |
@@ -78,8 +78,10 @@ ASCII armor (`-a/--armor`; decrypt/verify/info auto-detect).
 
 - [x] Armored round-trip: `-a` encrypt → decrypt (auto-detect) → identical.
 - [x] Armored output is 7-bit printable ASCII (only LF + `0x20..0x7e`).
-- [x] ⚠ Banner lines are exactly `-----BEGIN PALADIN MESSAGE-----` /
-  `-----END PALADIN MESSAGE-----` (64-column base64 body, LF endings).
+- [x] ⚠ Banner lines are exactly `-----BEGIN AESC MESSAGE-----` /
+  `-----END AESC MESSAGE-----` (64-column base64 body, LF endings). The legacy
+  `PALADIN MESSAGE` markers are read-only compat (locked by the goldens and the
+  Rust suites, DESIGN §5.6).
 - [x] Default armored output name is `<input>.aesc.asc` (DESIGN §6.5).
 - [x] `--info` on an armored file works (auto-detect).
 - [x] Armor to stdout (`-a -o -`) emits text; round-trips back through `-d -`.
@@ -160,42 +162,50 @@ Real-filesystem error paths (covers exit **1**, the one code the matrix doesn't 
 
 ## backward_compat — `cases/backward_compat_test.rb` ✅
 
-Locks the on-disk format: decrypt committed ciphertexts produced by this version
-so future changes can't silently break old files. Goldens live in
-`tests/fixtures/golden/`; the manifest + fixed password are in
-`tests/e2e/golden_manifest.rb`; regenerate with `tests/e2e/regenerate_goldens.rb`.
+Locks the on-disk format: decrypt committed ciphertexts produced by earlier
+builds so future changes can't silently break old files. Goldens live in
+`tests/fixtures/golden/`; the manifests + fixed password are in
+`tests/e2e/golden_manifest.rb`; regenerate the current set with
+`tests/e2e/regenerate_goldens.rb`.
 
-- [x] Goldens committed: cipher × KDF (6), one armored (`.asc`), one stdin-encrypted
-  (no filename). ⚠ They decrypt to a small fixed `golden/plaintext.txt` — **not**
-  the 300 KiB `LOREM_IPSUM.txt` — to honor "commit only small golden files", and
-  use fixed reduced KDF costs so decrypting them is fast even in debug builds.
+- [x] Two golden sets committed (DESIGN §14), each cipher × KDF (6), one armored
+  (`.asc`), one stdin-encrypted (no filename): the FROZEN legacy `.paladin` set
+  (pre-dialect-change build — PALADIN magic, legacy domain tag; never
+  regenerable) and the current `.aesc` set. ⚠ They decrypt to a small fixed
+  `golden/plaintext.txt` — **not** the 300 KiB `LOREM_IPSUM.txt` — to honor
+  "commit only small golden files", and use fixed reduced KDF costs so
+  decrypting them is fast even in debug builds.
 - [x] Decrypt each golden with the known password → matches the expected plaintext.
-- [x] `--info` on each golden reports its expected cipher/KDF/params/name_status.
+- [x] `--info` on each golden reports its dialect-qualified `format:` line plus
+  the expected cipher/KDF/params/name_status.
 - [x] Wrong password against a golden → exit 3.
 - [x] Deliberate regeneration step documented (`golden/README.md`); the script
-  refuses to overwrite without `--force` (never auto-overwrites goldens).
+  refuses to overwrite without `--force` and never writes the legacy set.
 
 ## interop_fixtures — `cases/interop_fixtures_test.rb` ✅
 
 Committed **full-size** (~294 KiB) ciphertexts of `tests/fixtures/LOREM_IPSUM.txt`,
 minted by real tool runs with the fixed public password `password`:
 `LOREM_IPSUM.txt.aes` by the genuine AES Crypt CLI (`aescrypt 3.16.1`, Stream
-Format 2) and `LOREM_IPSUM.txt.paladin` by the pre-rename paladin CLI at
+Format 2), `LOREM_IPSUM.txt.paladin` by the pre-dialect-change paladin CLI at
 shipped defaults (aes-256-gcm, argon2id `memory=65536,time=3,parallelism=1`) —
-the same container format aesc writes, kept `.paladin`-named to lock
-legacy-extension support. Provenance and regeneration:
-`tests/fixtures/README.md`.
+the FROZEN legacy dialect, kept `.paladin`-named to lock legacy-extension
+support — and `LOREM_IPSUM.txt.aesc` by the aesc CLI at the same defaults (the
+current dialect). Provenance and regeneration: `tests/fixtures/README.md`.
 
 - [x] `.aes` decrypts byte-for-byte to `LOREM_IPSUM.txt` — AES Crypt interop at
   scale (the committed Rust `.aes` fixtures are ≤ 3000 B; this is thousands of
   CBC blocks plus the final padding/HMAC path, through the real binary).
-- [x] `.paladin` decrypts byte-for-byte — a multi-chunk native body at the
-  shipped DEFAULT KDF costs (the goldens use reduced costs and a small
+- [x] `.paladin` decrypts byte-for-byte — a multi-chunk legacy-dialect body at
+  the shipped DEFAULT KDF costs (the goldens use reduced costs and a small
   plaintext), and the legacy extension keeps decrypting.
+- [x] `.aesc` decrypts byte-for-byte — the same full-size defaults-at-scale
+  lock for the dialect new files are written in.
 - [x] `--info` on each is **byte-exact** (no password): locks the aescrypt
-  `created_by`/`extensions` fields and the defaults recorded in the container.
-- [x] `--verify` accepts both fixtures with the fixed password.
-- [x] Wrong password → exit 3 for **both** formats (unified auth failure), and
+  `created_by`/`extensions` fields, the dialect-qualified `format:` line, and
+  the defaults recorded in the container.
+- [x] `--verify` accepts every fixture with the fixed password.
+- [x] Wrong password → exit 3 for **every** format (unified auth failure), and
   no output file remains.
 
 ## cross-cutting — `cases/misc_test.rb` ✅
@@ -226,7 +236,8 @@ Skipped by default so the suite stays fast/deterministic.
 - For a **downgrade** test, `set_byte` a header field to another *valid* value
   (e.g. cipher id `0x01`→`0x02`): the header still parses (so `--info` succeeds),
   but decrypt is exit **3** because the serialized header is chunk-0 AAD.
-- The magic is 8 bytes (`PALADIN`); the version byte is at offset 8 and is
+- The magic is 8 bytes (`aesc` + NUL pad for new files; the legacy `PALADIN`
+  is read-only compat — DESIGN §5.2); the version byte is at offset 8 and is
   checked first — flipping it gives exit 4 even from `--info` (no password).
   The cipher id is offset 9, the kdf id offset 10, the flags byte offset 11.
 - Decrypt/verify/info are **header-driven**: passing `-c`/`--kdf`/`-a`/`--name`

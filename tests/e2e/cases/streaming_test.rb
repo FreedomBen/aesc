@@ -57,7 +57,7 @@ class StreamingTest < E2ETest
     enc = aesc("-e", "-", "-a", "-o", "-", *FAST_KDF, "--password-env", "PW",
                    stdin: data, env: env)
     assert_status enc, 0
-    assert enc.stdout.start_with?("-----BEGIN PALADIN MESSAGE-----"),
+    assert enc.stdout.start_with?("-----BEGIN AESC MESSAGE-----"),
            "armored stdout should start with the BEGIN marker"
     dec = aesc("-d", "-", "-o", "-", "--password-env", "PW",
                    stdin: enc.stdout, env: env)

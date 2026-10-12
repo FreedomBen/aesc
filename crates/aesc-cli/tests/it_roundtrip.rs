@@ -402,3 +402,31 @@ fn clobber_refused_without_force() {
     .assert()
     .success();
 }
+
+/// A genuine pre-dialect-change container (committed fixture: PALADIN magic,
+/// legacy domain tag) decrypts through the binary with its original password,
+/// restoring the stored filename (DESIGN §5.2, §14). This is the CLI-level
+/// backward-compatibility lock for old files.
+#[test]
+fn legacy_paladin_container_decrypts_through_the_binary() {
+    const LEGACY: &[u8] = include_bytes!("../../aesc-core/tests/data/legacy/v1.paladin");
+    const PLAINTEXT: &[u8] =
+        b"paladin legacy container fixture: encrypted by the last pre-aesc-dialect build.\n";
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path();
+    fs::write(p(dir, "v1.paladin"), LEGACY).unwrap();
+
+    sc().args([
+        "-d",
+        &p(dir, "v1.paladin"),
+        "-p",
+        "paladin legacy fixture password",
+    ])
+    .assert()
+    .success();
+
+    // The fixture stores its original name, so decrypt restores `legacy.txt`.
+    let restored = dir.join("legacy.txt");
+    assert!(restored.exists());
+    assert_eq!(fs::read(restored).unwrap(), PLAINTEXT);
+}

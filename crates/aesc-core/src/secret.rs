@@ -9,12 +9,15 @@ use std::fmt;
 use zeroize::Zeroizing;
 
 use crate::error::{AescError, Result};
+use crate::header::Dialect;
 
-/// Domain-separation prefix for the KDF input (DESIGN §4.2). The trailing NUL is
-/// part of the constant. The literal keeps the original "paladin" project name:
-/// it is baked into every v1 file's key derivation, so changing it would make
-/// existing files undecryptable.
-const SECRET_DOMAIN: &[u8] = b"paladin secret v1\0";
+/// Domain-separation prefix for the KDF input of new files (DESIGN §4.2). The
+/// trailing NUL is part of the constant.
+const SECRET_DOMAIN: &[u8] = b"aesc secret v1\0";
+/// The pre-rename domain tag (DESIGN §4.2, §14): baked into every legacy
+/// PALADIN-magic file's key derivation, so it is applied whenever such a
+/// container is read. Changing it would make those files undecryptable.
+const LEGACY_SECRET_DOMAIN: &[u8] = b"paladin secret v1\0";
 
 /// Maximum keyfile size read into memory: 1 MiB (DESIGN §4.2). Bounds memory and
 /// is shared with the front-ends so they enforce the same limit.
@@ -75,16 +78,23 @@ impl Secret {
     }
 
     /// The domain-separated, length-prefixed KDF input (DESIGN §4.2):
-    /// `SECRET_DOMAIN || u64be(pw_len) || pw || u64be(kf_len) || kf`.
+    /// `domain || u64be(pw_len) || pw || u64be(kf_len) || kf`, where `domain`
+    /// is selected by the container dialect: the aesc tag for new files, the
+    /// legacy paladin tag when reading a PALADIN-magic container (§14). The two
+    /// tags separate the dialects' key spaces.
     ///
     /// The result is wrapped in [`Zeroizing`] so it is wiped after key
     /// derivation. The exact capacity is reserved up front so the buffer never
     /// reallocates and leaves a stale copy of secret bytes behind.
-    pub(crate) fn kdf_input(&self) -> Zeroizing<Vec<u8>> {
+    pub(crate) fn kdf_input(&self, dialect: Dialect) -> Zeroizing<Vec<u8>> {
+        let domain: &[u8] = match dialect {
+            Dialect::Aesc => SECRET_DOMAIN,
+            Dialect::Paladin => LEGACY_SECRET_DOMAIN,
+        };
         let pw: &[u8] = &self.password;
         let kf: &[u8] = self.keyfile.as_ref().map(|k| k.as_slice()).unwrap_or(&[]);
-        let mut out = Vec::with_capacity(SECRET_DOMAIN.len() + 8 + pw.len() + 8 + kf.len());
-        out.extend_from_slice(SECRET_DOMAIN);
+        let mut out = Vec::with_capacity(domain.len() + 8 + pw.len() + 8 + kf.len());
+        out.extend_from_slice(domain);
         out.extend_from_slice(&(pw.len() as u64).to_be_bytes());
         out.extend_from_slice(pw);
         out.extend_from_slice(&(kf.len() as u64).to_be_bytes());
@@ -164,25 +174,49 @@ mod tests {
 
     #[test]
     fn kdf_input_exact_layout_is_locked() {
-        // Locks the §4.2 wire encoding so it cannot drift silently.
+        // Locks the §4.2 wire encoding for BOTH dialect domain tags so neither
+        // can drift silently: the aesc tag is written into every new file's key
+        // derivation, the paladin tag into every pre-rename file's.
         let s = Secret::new(b"pw", Some(b"k")).unwrap();
+
         let mut expected = Vec::new();
-        expected.extend_from_slice(b"paladin secret v1\0");
+        expected.extend_from_slice(b"aesc secret v1\0");
         expected.extend_from_slice(&2u64.to_be_bytes());
         expected.extend_from_slice(b"pw");
         expected.extend_from_slice(&1u64.to_be_bytes());
         expected.extend_from_slice(b"k");
-        assert_eq!(&*s.kdf_input(), &expected[..]);
-        // The domain prefix is exactly 18 bytes (17 ASCII + NUL).
-        assert_eq!(SECRET_DOMAIN.len(), 18);
+        assert_eq!(&*s.kdf_input(Dialect::Aesc), &expected[..]);
+        // The aesc domain prefix is exactly 15 bytes (14 ASCII + NUL).
+        assert_eq!(SECRET_DOMAIN.len(), 15);
+
+        let mut legacy = Vec::new();
+        legacy.extend_from_slice(b"paladin secret v1\0");
+        legacy.extend_from_slice(&2u64.to_be_bytes());
+        legacy.extend_from_slice(b"pw");
+        legacy.extend_from_slice(&1u64.to_be_bytes());
+        legacy.extend_from_slice(b"k");
+        assert_eq!(&*s.kdf_input(Dialect::Paladin), &legacy[..]);
+        // The legacy domain prefix is exactly 18 bytes (17 ASCII + NUL).
+        assert_eq!(LEGACY_SECRET_DOMAIN.len(), 18);
+    }
+
+    #[test]
+    fn dialects_derive_different_kdf_inputs() {
+        // The dialect tags separate the key spaces: the same secret must never
+        // produce the same KDF input for both dialects.
+        let s = Secret::new(b"same password", None).unwrap();
+        assert_ne!(
+            &*s.kdf_input(Dialect::Aesc),
+            &*s.kdf_input(Dialect::Paladin)
+        );
     }
 
     #[test]
     fn keyfile_only_encodes_zero_length_password() {
         let s = Secret::new(b"", Some(b"k")).unwrap();
-        let input = s.kdf_input();
+        let input = s.kdf_input(Dialect::Aesc);
         let mut expected = Vec::new();
-        expected.extend_from_slice(b"paladin secret v1\0");
+        expected.extend_from_slice(b"aesc secret v1\0");
         expected.extend_from_slice(&0u64.to_be_bytes());
         expected.extend_from_slice(&1u64.to_be_bytes());
         expected.extend_from_slice(b"k");
@@ -192,16 +226,18 @@ mod tests {
     #[test]
     fn length_prefixes_remove_password_keyfile_ambiguity() {
         // The classic confusion: ("ab","c") and ("a","bc") share the same
-        // concatenated bytes but must derive different keys.
-        let a = Secret::new(b"ab", Some(b"c")).unwrap();
-        let b = Secret::new(b"a", Some(b"bc")).unwrap();
-        assert_ne!(&*a.kdf_input(), &*b.kdf_input());
+        // concatenated bytes but must derive different keys — in both dialects.
+        for dialect in [Dialect::Aesc, Dialect::Paladin] {
+            let a = Secret::new(b"ab", Some(b"c")).unwrap();
+            let b = Secret::new(b"a", Some(b"bc")).unwrap();
+            assert_ne!(&*a.kdf_input(dialect), &*b.kdf_input(dialect));
 
-        // A keyfile-only secret must differ from a password-only one with the
-        // same bytes.
-        let pw_only = Secret::new(b"secret", None).unwrap();
-        let kf_only = Secret::new(b"", Some(b"secret")).unwrap();
-        assert_ne!(&*pw_only.kdf_input(), &*kf_only.kdf_input());
+            // A keyfile-only secret must differ from a password-only one with
+            // the same bytes.
+            let pw_only = Secret::new(b"secret", None).unwrap();
+            let kf_only = Secret::new(b"", Some(b"secret")).unwrap();
+            assert_ne!(&*pw_only.kdf_input(dialect), &*kf_only.kdf_input(dialect));
+        }
     }
 
     #[test]

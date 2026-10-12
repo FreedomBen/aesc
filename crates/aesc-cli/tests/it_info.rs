@@ -259,3 +259,33 @@ fn info_armored_input_autodetected() {
     );
     assert_eq!(info_stdout(&cipher), expected);
 }
+
+// ---------------------------------------------------------------------------
+// 7 — legacy paladin container: full byte-exact block with the qualified
+//     format line (DESIGN §6.2, §14). Uses the committed pre-dialect-change
+//     fixture, so this also pins that `--info` keeps reading legacy files.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn info_legacy_paladin_container_full_block() {
+    const LEGACY: &[u8] = include_bytes!("../../aesc-core/tests/data/legacy/v1.paladin");
+    let dir = TempDir::new().unwrap();
+    let cipher = dir.path().join("v1.paladin");
+    fs::write(&cipher, LEGACY).unwrap();
+
+    let expected = concat!(
+        "format: aesc (legacy paladin container)\n",
+        "version: 1\n",
+        "cipher: aes-256-gcm\n",
+        "kdf: pbkdf2\n",
+        "kdf_params: iterations=10000\n",
+        "flags: 0x01\n",
+        "keyfile_hint: false\n",
+        "chunk_size: 65536\n",
+        "salt_len: 16\n",
+        "nonce_prefix_len: 7\n",
+        "name_status: present\n",
+        "name: legacy.txt\n",
+    );
+    assert_eq!(info_stdout(&cipher), expected);
+}

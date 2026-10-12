@@ -3,7 +3,7 @@
 //! integration tests assert it byte-for-byte for both the aesc and the AES
 //! Crypt block.
 
-use aesc_core::{AesCryptHeader, Header, KdfParams, Metadata, NameStatus};
+use aesc_core::{AesCryptHeader, Dialect, Header, KdfParams, Metadata, NameStatus};
 
 /// Render the stable, ordered `--info` block for whichever container was
 /// recognized (trailing newline included).
@@ -27,9 +27,15 @@ fn format_aesc(header: &Header) -> String {
     } else {
         ""
     };
+    // A legacy pre-rename container is called out on the format line
+    // (DESIGN §6.2) so users know which identifiers the file carries.
+    let format = match header.dialect {
+        Dialect::Aesc => "aesc",
+        Dialect::Paladin => "aesc (legacy paladin container)",
+    };
 
     let lines = [
-        "format: aesc".to_string(),
+        format!("format: {format}"),
         format!("version: {}", header.version),
         format!("cipher: {}", header.cipher),
         format!("kdf: {}", header.kdf()),

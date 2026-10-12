@@ -24,8 +24,8 @@ pub enum AescError {
     #[error("authentication failed: wrong password or corrupted/tampered file")]
     Auth,
 
-    /// The input begins with neither the native `PALADIN` magic nor the AES
-    /// Crypt `AES` magic. Exit code 4.
+    /// The input begins with no recognized magic: neither a native one (`aesc`,
+    /// or the legacy `PALADIN`) nor the AES Crypt `AES` magic. Exit code 4.
     #[error("not a recognized aesc or AES Crypt file (bad magic)")]
     BadMagic,
 

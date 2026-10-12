@@ -1,4 +1,4 @@
-.TH AESC 1 "2026-10-11" "aesc 0.2.1" "User Commands"
+.TH AESC 1 "2026-10-12" "aesc 0.2.1" "User Commands"
 .SH NAME
 aesc \- simple, safe symmetric file encryption
 .SH SYNOPSIS
@@ -12,6 +12,18 @@ encrypted container begins with a self-describing, authenticated header, so a
 file can be decrypted with only the password or keyfile \(em no out-of-band
 parameters. The default cipher is AES-256-GCM and the default key-derivation
 function is Argon2id.
+.PP
+Files written before the application was renamed from
+.B paladin
+to aesc carry the legacy container identifiers (the
+.B PALADIN
+magic and armor markers). They are detected automatically and keep decrypting
+forever;
+.B \-i
+reports one as
+.BR "format: aesc (legacy paladin container)" .
+New files are only ever written with aesc's own identifiers, so builds from
+before the change cannot read them.
 .PP
 .BR \-d ", " \-\-verify ", and " \-i
 also read foreign

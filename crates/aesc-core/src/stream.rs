@@ -18,7 +18,7 @@ use std::ops::ControlFlow;
 
 use crate::cipher::{Cipher, CipherId};
 use crate::error::{AescError, Result};
-use crate::header::{self, CHUNK_SIZE};
+use crate::header::{self, Dialect, CHUNK_SIZE};
 use crate::kdf::{KdfId, KdfParams};
 use crate::secret::Secret;
 
@@ -205,7 +205,10 @@ fn encrypt_deterministic<R: Read, W: Write>(
         secret.has_keyfile(),
     );
 
-    let key = opts.kdf_params.derive_key(&secret.kdf_input(), salt)?;
+    // New files are always written in the aesc dialect (DESIGN §5.2, §14).
+    let key = opts
+        .kdf_params
+        .derive_key(&secret.kdf_input(Dialect::Aesc), salt)?;
     report(on_progress, 0, input_len)?; // cancel after key derivation (output still empty)
 
     output.write_all(&header_bytes).map_err(AescError::Io)?;
@@ -281,9 +284,11 @@ fn decrypt_impl<R: Read, W: Write>(
     let header = header::parse(&mut input)?;
     report(on_progress, 0, input_len)?; // cancel before key derivation
 
+    // The magic selects the KDF domain tag (DESIGN §4.2), so a legacy
+    // PALADIN-magic container derives with the tag it was encrypted under.
     let key = header
         .kdf_params
-        .derive_key(&secret.kdf_input(), &header.salt)?;
+        .derive_key(&secret.kdf_input(header.dialect), &header.salt)?;
     report(on_progress, 0, input_len)?; // cancel after key derivation
 
     let cipher = Cipher::new(header.cipher, &key);
@@ -695,24 +700,43 @@ mod tests {
         assert_eq!(n0[11], 0x00);
     }
 
+    /// Frozen pre-dialect-change binary vectors (DESIGN §10, §14): PALADIN
+    /// magic, legacy domain tag, fixed salt/nonce, password
+    /// `paladin known-answer vector`, plaintext
+    /// `paladin v1 known-answer test vector`. Encryption only writes the aesc
+    /// dialect now, so these can never be regenerated — they are decrypt-only
+    /// locks proving the legacy read path never breaks. Order matches the
+    /// modern vectors: AES-256-GCM/PBKDF2, then ChaCha20-Poly1305/Argon2id.
+    const LEGACY_KAT_VECTORS: [&str; 2] = [
+        "50414c4144494e000101030000002710000000000000000010000102030405060708090a0b0c0d0e0f0710111213141516000010008f94c0fd319d2dad53317abaff1a8e37c4424f580c2ff997e14edc042c2084949d78922983cc06e48a0243151eeb7d0ac7f271",
+        "50414c4144494e000102010000002000000000010000000110000102030405060708090a0b0c0d0e0f0710111213141516000010002000efc900a30efcebde380827c3b1254434e0de444b11662ce7cb5fc8bbe7f4b62c001626f59ecf7334f8be871056bc96c077",
+    ];
+
+    fn legacy_kat_secret() -> Secret {
+        Secret::new(b"paladin known-answer vector", None).unwrap()
+    }
+    const LEGACY_KAT_PLAINTEXT: &[u8] = b"paladin v1 known-answer test vector";
+
     /// Known-answer vectors (DESIGN §10): committed ciphertext for fixed inputs
     /// produced with a deterministic salt/nonce source, so an accidental format
     /// change is caught across versions. Production encryption always uses OS
     /// randomness. To regenerate after an intentional format change, print
-    /// `hex::encode(&out)` for each vector and paste the result below.
+    /// `hex::encode(&out)` for each vector and paste the result below — and
+    /// move the superseded vectors into a frozen decrypt-only lock like
+    /// [`LEGACY_KAT_VECTORS`].
     #[test]
     fn known_answer_vectors_are_stable_and_decrypt() {
         let salt: [u8; SALT_LEN] = std::array::from_fn(|i| i as u8);
         let nonce: [u8; NONCE_PREFIX_LEN] = std::array::from_fn(|i| (16 + i) as u8);
-        let kat_secret = Secret::new(b"paladin known-answer vector", None).unwrap();
-        let plaintext = b"paladin v1 known-answer test vector";
+        let kat_secret = Secret::new(b"aesc known-answer vector", None).unwrap();
+        let plaintext = b"aesc dialect known-answer test vector";
 
         let vectors = [
             (
                 CipherId::Aes256Gcm,
                 KdfId::Pbkdf2,
                 KdfParams::Pbkdf2 { iterations: 10_000 },
-                "50414c4144494e000101030000002710000000000000000010000102030405060708090a0b0c0d0e0f0710111213141516000010008f94c0fd319d2dad53317abaff1a8e37c4424f580c2ff997e14edc042c2084949d78922983cc06e48a0243151eeb7d0ac7f271",
+                "61657363000000000101030000002710000000000000000010000102030405060708090a0b0c0d0e0f071011121314151600001000d03f9acd93b72c7adcc043b604a59b34e567cc59f0436a5142501ef4df5a5a5132cbeb9e75769a3634675fc34f6605cf004737c3bd",
             ),
             (
                 CipherId::ChaCha20Poly1305,
@@ -722,7 +746,7 @@ mod tests {
                     time_cost: 1,
                     parallelism: 1,
                 },
-                "50414c4144494e000102010000002000000000010000000110000102030405060708090a0b0c0d0e0f0710111213141516000010002000efc900a30efcebde380827c3b1254434e0de444b11662ce7cb5fc8bbe7f4b62c001626f59ecf7334f8be871056bc96c077",
+                "61657363000000000102010000002000000000010000000110000102030405060708090a0b0c0d0e0f071011121314151600001000f0d9a37f6cf82a2011359d1193a6585e38b9240d39a183c17927e2c8c3e9bb31fe0adab6846829a0405f6b507b05a0f3fde4944928",
             ),
         ];
 
@@ -776,25 +800,52 @@ mod tests {
         }
     }
 
+    /// The frozen legacy vectors still decrypt (DESIGN §10, §14): the PALADIN
+    /// magic routes to the native path and selects the legacy domain tag, so
+    /// every pre-dialect-change file keeps opening with its original password.
+    #[test]
+    fn legacy_known_answer_vectors_still_decrypt() {
+        for expected_hex in LEGACY_KAT_VECTORS {
+            let committed = hex::decode(expected_hex).unwrap();
+            assert!(
+                committed.starts_with(b"PALADIN\0"),
+                "legacy vector must carry the PALADIN magic"
+            );
+            let mut out = Vec::new();
+            let mut cb = noop();
+            decrypt(
+                committed.as_slice(),
+                &mut out,
+                &legacy_kat_secret(),
+                None,
+                &mut cb,
+            )
+            .unwrap();
+            assert_eq!(out, LEGACY_KAT_PLAINTEXT, "legacy vector did not decrypt");
+        }
+    }
+
     /// Armored known-answer vector (DESIGN §10, "at least one armored fixture").
     /// The binary container is the AES-256-GCM/PBKDF2 vector above; this commits
     /// its ASCII-armored form so the base64 framing (alphabet, 64-col wrap,
     /// BEGIN/END markers, single trailing LF) is locked across versions. The
     /// armor layer is applied by wrapping the writer exactly as `lib.rs::encrypt`
-    /// does. To regenerate after an intentional format change, print `armored`.
+    /// does. To regenerate after an intentional format change, print `armored`
+    /// — and freeze the superseded fixture as a decrypt-only lock like
+    /// [`LEGACY_ARMORED_KAT`].
     #[test]
     fn armored_known_answer_vector_is_stable_and_decrypts() {
         let salt: [u8; SALT_LEN] = std::array::from_fn(|i| i as u8);
         let nonce: [u8; NONCE_PREFIX_LEN] = std::array::from_fn(|i| (16 + i) as u8);
-        let kat_secret = Secret::new(b"paladin known-answer vector", None).unwrap();
-        let plaintext = b"paladin v1 known-answer test vector";
+        let kat_secret = Secret::new(b"aesc known-answer vector", None).unwrap();
+        let plaintext = b"aesc dialect known-answer test vector";
 
         const ARMORED_KAT: &str = concat!(
-            "-----BEGIN PALADIN MESSAGE-----\n",
-            "UEFMQURJTgABAQMAAAAnEAAAAAAAAAAAEAABAgMEBQYHCAkKCwwNDg8HEBESExQV\n",
-            "FgAAEACPlMD9MZ0trVMxerr/Go43xEJPWAwv+ZfhTtwELCCElJ14kimDzAbkigJD\n",
-            "FR7rfQrH8nE=\n",
-            "-----END PALADIN MESSAGE-----\n",
+            "-----BEGIN AESC MESSAGE-----\n",
+            "YWVzYwAAAAABAQMAAAAnEAAAAAAAAAAAEAABAgMEBQYHCAkKCwwNDg8HEBESExQV\n",
+            "FgAAEADQP5rNk7csetzAQ7YEpZs05WfMWfBDalFCUB7031paUTLL6551dpo2NGdf\n",
+            "w09mBc8ARzfDvQ==\n",
+            "-----END AESC MESSAGE-----\n",
         );
 
         let opts = EncryptOptions {
@@ -834,6 +885,73 @@ mod tests {
         let mut cb = noop();
         crate::decrypt(armored.as_bytes(), &mut out, &kat_secret, None, &mut cb).unwrap();
         assert_eq!(out, plaintext);
+    }
+
+    /// The frozen pre-dialect-change armored fixture (DESIGN §10, §14): PALADIN
+    /// markers around the legacy AES-256-GCM/PBKDF2 vector. Decrypt-only — it
+    /// locks the legacy armor markers and the legacy container together through
+    /// the public auto-dearmor + stream path.
+    const LEGACY_ARMORED_KAT: &str = concat!(
+        "-----BEGIN PALADIN MESSAGE-----\n",
+        "UEFMQURJTgABAQMAAAAnEAAAAAAAAAAAEAABAgMEBQYHCAkKCwwNDg8HEBESExQV\n",
+        "FgAAEACPlMD9MZ0trVMxerr/Go43xEJPWAwv+ZfhTtwELCCElJ14kimDzAbkigJD\n",
+        "FR7rfQrH8nE=\n",
+        "-----END PALADIN MESSAGE-----\n",
+    );
+
+    #[test]
+    fn legacy_armored_known_answer_vector_still_decrypts() {
+        let mut out = Vec::new();
+        let mut cb = noop();
+        crate::decrypt(
+            LEGACY_ARMORED_KAT.as_bytes(),
+            &mut out,
+            &legacy_kat_secret(),
+            None,
+            &mut cb,
+        )
+        .unwrap();
+        assert_eq!(out, LEGACY_KAT_PLAINTEXT);
+    }
+
+    /// New files are written in the aesc dialect: the container begins with the
+    /// `aesc` magic, never the legacy `PALADIN` one (DESIGN §5.2, §14).
+    #[test]
+    fn encrypt_writes_the_aesc_magic() {
+        let ct = enc(b"dialect check", &fast_opts(CipherId::Aes256Gcm));
+        assert!(
+            ct.starts_with(b"aesc\0\0\0\0"),
+            "new files carry the aesc magic"
+        );
+    }
+
+    /// Rewriting the magic to the other dialect must fail authentication in
+    /// both directions (DESIGN §5.2, §14): the magic selects the KDF domain tag
+    /// and is bound as chunk-0 AAD, so a cross-dialect rewrite can never
+    /// decrypt.
+    #[test]
+    fn cross_dialect_magic_rewrite_fails_auth() {
+        // aesc → PALADIN: a fresh container re-badged as legacy.
+        let ct = enc(b"cross dialect payload", &fast_opts(CipherId::Aes256Gcm));
+        let mut forged = ct.clone();
+        forged[0..8].copy_from_slice(b"PALADIN\0");
+        assert!(matches!(dec(&forged), Err(AescError::Auth)));
+
+        // PALADIN → aesc: a frozen legacy vector re-badged as modern.
+        let legacy = hex::decode(LEGACY_KAT_VECTORS[0]).unwrap();
+        let mut forged = legacy.clone();
+        forged[0..8].copy_from_slice(b"aesc\0\0\0\0");
+        let mut cb = noop();
+        assert!(matches!(
+            decrypt(
+                forged.as_slice(),
+                &mut Vec::new(),
+                &legacy_kat_secret(),
+                None,
+                &mut cb
+            ),
+            Err(AescError::Auth)
+        ));
     }
 
     /// A fresh OS-random salt and nonce prefix per encryption means encrypting

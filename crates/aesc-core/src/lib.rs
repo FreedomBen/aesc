@@ -25,7 +25,7 @@ mod stream;
 pub use aescrypt::{AesCryptHeader, AesCryptKdf};
 pub use cipher::CipherId;
 pub use error::{AescError, Result};
-pub use header::{Header, NameStatus};
+pub use header::{Dialect, Header, NameStatus};
 pub use kdf::{KdfId, KdfParams};
 pub use paths::{default_aescrypt_output, default_decrypt_output, default_encrypt_output};
 pub use secret::{Secret, KEYFILE_MAX_BYTES};
@@ -158,9 +158,9 @@ mod tests {
         for armored in [false, true] {
             let ct = do_encrypt(&data, &opts(armored, None));
             if armored {
-                assert!(ct.starts_with(b"-----BEGIN PALADIN MESSAGE-----"));
+                assert!(ct.starts_with(b"-----BEGIN AESC MESSAGE-----"));
             } else {
-                assert!(ct.starts_with(b"PALADIN\0"));
+                assert!(ct.starts_with(b"aesc\0\0\0\0"));
             }
             let mut out = Vec::new();
             let mut cb = noop();
@@ -176,6 +176,7 @@ mod tests {
         let Metadata::Aesc(header) = inspect(ct.as_slice()).unwrap() else {
             panic!("expected an aesc container");
         };
+        assert_eq!(header.dialect, Dialect::Aesc);
         assert_eq!(header.cipher, CipherId::ChaCha20Poly1305);
         assert_eq!(header.kdf(), KdfId::Pbkdf2);
         assert_eq!(header.name_status, NameStatus::Present);
@@ -205,8 +206,7 @@ mod tests {
         // Invalid base64 in the armor body must surface as MalformedHeader
         // (exit 4) through the public API, proving the armor framing error is
         // recovered through the Read interface rather than mis-mapped to Io.
-        let bad =
-            b"-----BEGIN PALADIN MESSAGE-----\n!!!!not base64!!!!\n-----END PALADIN MESSAGE-----\n";
+        let bad = b"-----BEGIN AESC MESSAGE-----\n!!!!not base64!!!!\n-----END AESC MESSAGE-----\n";
         assert!(matches!(
             inspect(bad.as_ref()),
             Err(AescError::MalformedHeader(_))
@@ -276,10 +276,12 @@ mod tests {
 
     #[test]
     fn is_armored_accepts_marker_lf_crlf_and_leading_whitespace() {
-        assert!(is_armored(b"-----BEGIN PALADIN MESSAGE-----\nAAAA\n"));
+        assert!(is_armored(b"-----BEGIN AESC MESSAGE-----\nAAAA\n"));
         assert!(is_armored(
-            b"\r\n \t-----BEGIN PALADIN MESSAGE-----\r\nAAAA\r\n"
+            b"\r\n \t-----BEGIN AESC MESSAGE-----\r\nAAAA\r\n"
         ));
+        // Legacy armored files (PALADIN markers) are detected the same way.
+        assert!(is_armored(b"-----BEGIN PALADIN MESSAGE-----\nAAAA\n"));
         // The rule decides on the first non-whitespace byte (like decrypt's
         // auto-detect), so even a one-byte marker prefix is recognized.
         assert!(is_armored(b"-"));
@@ -287,7 +289,8 @@ mod tests {
 
     #[test]
     fn is_armored_rejects_binary_truncated_and_empty_prefixes() {
-        assert!(!is_armored(b"PALADIN\0")); // binary magic
+        assert!(!is_armored(b"aesc\0\0\0\0")); // binary magic
+        assert!(!is_armored(b"PALADIN\0")); // legacy binary magic
         assert!(!is_armored(b"P")); // truncated binary magic
         assert!(!is_armored(b"")); // empty
         assert!(!is_armored(b" \t\r\n")); // all whitespace

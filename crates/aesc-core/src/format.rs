@@ -9,16 +9,20 @@ use std::io::{self, Read};
 
 use crate::error::{AescError, Result};
 
-/// Native aesc magic (DESIGN §5.2): ASCII "PALADIN" plus a NUL pad (8 bytes).
-/// The literal keeps the original project name — it is part of the v1 format.
-const NATIVE_MAGIC: &[u8] = b"PALADIN\0";
-/// AES Crypt magic (PLAN_05 §2.1).
+/// Native aesc magic (DESIGN §5.2): ASCII "aesc" plus a NUL pad (8 bytes).
+const NATIVE_MAGIC: &[u8] = b"aesc\0\0\0\0";
+/// Native magic written by pre-rename builds (DESIGN §5.2, §14); accepted on
+/// read forever. Same length as the aesc magic, so one 8-byte peek decides.
+const LEGACY_NATIVE_MAGIC: &[u8] = b"PALADIN\0";
+/// AES Crypt magic (PLAN_05 §2.1). Uppercase, so it shares no prefix with the
+/// lowercase native magic.
 const AESCRYPT_MAGIC: &[u8] = b"AES";
 
 /// Which container the input is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Format {
-    /// An aesc container (`header::parse` + `stream::*`).
+    /// A native container — either dialect's magic (`header::parse` records
+    /// which one as `Header.dialect`) — read by `stream::*`.
     Aesc,
     /// An AES Crypt container (`aescrypt::*`).
     AesCrypt,
@@ -36,7 +40,7 @@ pub(crate) fn detect<R: Read>(mut input: R) -> Result<(Format, impl Read)> {
 
     let format = if peek.starts_with(AESCRYPT_MAGIC) {
         Format::AesCrypt
-    } else if peek == NATIVE_MAGIC {
+    } else if peek == NATIVE_MAGIC || peek == LEGACY_NATIVE_MAGIC {
         Format::Aesc
     } else if is_proper_prefix_of_magic(&peek) {
         return Err(AescError::MalformedHeader(
@@ -49,11 +53,12 @@ pub(crate) fn detect<R: Read>(mut input: R) -> Result<(Format, impl Read)> {
     Ok((format, io::Cursor::new(peek).chain(input)))
 }
 
-/// Whether `peek` is a proper (shorter-than-magic) prefix of either supported
+/// Whether `peek` is a proper (shorter-than-magic) prefix of any supported
 /// magic — i.e. the input may be a truncated header rather than a foreign file.
 fn is_proper_prefix_of_magic(peek: &[u8]) -> bool {
-    (peek.len() < NATIVE_MAGIC.len() && NATIVE_MAGIC.starts_with(peek))
-        || (peek.len() < AESCRYPT_MAGIC.len() && AESCRYPT_MAGIC.starts_with(peek))
+    [NATIVE_MAGIC, LEGACY_NATIVE_MAGIC, AESCRYPT_MAGIC]
+        .iter()
+        .any(|magic| peek.len() < magic.len() && magic.starts_with(peek))
 }
 
 /// Read up to `max` bytes, returning fewer only at end of input. Mirrors
@@ -94,6 +99,16 @@ mod tests {
 
     #[test]
     fn aesc_magic_is_detected_and_rechained() {
+        let input = b"aesc\x00\x00\x00\x00\x01the rest of the container";
+        let (format, drained) = detect_and_drain(input).unwrap();
+        assert_eq!(format, Format::Aesc);
+        assert_eq!(drained, input, "re-chained reader reproduces the input");
+    }
+
+    /// The legacy PALADIN magic routes to the same native path forever
+    /// (DESIGN §5.2, §14).
+    #[test]
+    fn legacy_paladin_magic_is_detected_and_rechained() {
         let input = b"PALADIN\x00\x01the rest of the container";
         let (format, drained) = detect_and_drain(input).unwrap();
         assert_eq!(format, Format::Aesc);
@@ -119,17 +134,31 @@ mod tests {
             detect_and_drain(b"GARBAGE!and more"),
             Err(AescError::BadMagic)
         ));
-        // Eight bytes that share the PALADIN prefix but differ in the 8th byte.
+        // Eight bytes that share a native-magic prefix but differ in the 8th
+        // byte (both dialects).
         assert!(matches!(
             detect_and_drain(b"PALADINxtail"),
+            Err(AescError::BadMagic)
+        ));
+        assert!(matches!(
+            detect_and_drain(b"aesc\x00\x00\x00xtail"),
             Err(AescError::BadMagic)
         ));
     }
 
     #[test]
     fn short_prefix_of_a_magic_is_malformed_not_bad() {
-        // Proper prefixes of PALADIN and of AES are treated as truncated headers.
-        for short in [b"".as_slice(), b"P", b"PAL", b"PALADIN", b"A", b"AE"] {
+        // Proper prefixes of aesc, PALADIN, and AES are truncated headers.
+        for short in [
+            b"".as_slice(),
+            b"P",
+            b"PAL",
+            b"PALADIN",
+            b"A",
+            b"AE",
+            b"aesc",
+            b"aesc\x00\x00",
+        ] {
             assert!(
                 matches!(detect_and_drain(short), Err(AescError::MalformedHeader(_))),
                 "prefix {short:?} should be MalformedHeader"

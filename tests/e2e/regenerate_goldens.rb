@@ -1,12 +1,18 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 #
-# Regenerate the backward-compatibility goldens in tests/fixtures/golden/.
+# Regenerate the CURRENT-dialect backward-compatibility goldens in
+# tests/fixtures/golden/ (the `.aesc` set from golden_manifest.rb).
 #
 # This is a DELIBERATE, REVIEWED step — goldens exist to catch accidental
 # on-disk-format changes, so they must never be overwritten casually. The script
 # refuses to clobber existing goldens unless you pass --force, and it prints a
 # git diff hint so the regeneration lands in a reviewable commit.
+#
+# The FROZEN legacy `.paladin` goldens (Golden.legacy_manifest) are never
+# touched here: they were minted by the pre-dialect-change build and no build
+# can write that dialect anymore (DESIGN §14). Only the current `.aesc` set is
+# regenerable.
 #
 #   ruby tests/e2e/regenerate_goldens.rb           # create goldens (won't clobber)
 #   ruby tests/e2e/regenerate_goldens.rb --force   # intentionally rewrite them
@@ -32,7 +38,15 @@ unless File.file?(Golden::PLAINTEXT)
   exit 1
 end
 
-existing = Golden.manifest.map { |g| g[:path] }.select { |p| File.exist?(p) }
+# Only the current-dialect set is generated; a legacy entry here is a manifest
+# bug, caught before anything is written.
+targets = Golden.current_manifest
+if targets.any? { |g| g[:legacy] }
+  warn "BUG: Golden.current_manifest contains a frozen legacy golden"
+  exit 1
+end
+
+existing = targets.map { |g| g[:path] }.select { |p| File.exist?(p) }
 if existing.any? && !force
   warn "Refusing to overwrite #{existing.size} existing golden(s):"
   existing.each { |p| warn "  #{p}" }
@@ -53,7 +67,7 @@ def run!(args, stdin: nil)
   exit 1
 end
 
-Golden.manifest.each do |g|
+targets.each do |g|
   # -f lets aesc overwrite an existing golden; the script-level --force guard
   # above is what actually decides whether we regenerate at all.
   base = %W[--cipher #{g[:cipher]} --kdf #{g[:kdf]}] + g[:cost] + %w[--password-env GPW -f]
@@ -68,6 +82,6 @@ Golden.manifest.each do |g|
 end
 
 puts
-puts "Generated #{Golden.manifest.size} goldens in #{Golden::DIR}"
+puts "Generated #{targets.size} goldens in #{Golden::DIR}"
 puts "Review and commit them deliberately, e.g.:"
 puts "  git add tests/fixtures/golden && git status"

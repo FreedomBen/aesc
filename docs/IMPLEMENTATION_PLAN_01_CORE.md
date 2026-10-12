@@ -171,13 +171,18 @@ impl Secret {
 ```
 
 Encoding (exact, §4.2):
-`b"paladin secret v1\0" || u64be(pw_len) || pw || u64be(kf_len) || kf`
-(the domain tag keeps the original project name — it is part of the v1 format).
+`domain_tag || u64be(pw_len) || pw || u64be(kf_len) || kf`, where `domain_tag`
+is selected by the container dialect (§5.2): `b"aesc secret v1\0"` for new
+files, `b"paladin secret v1\0"` for a legacy `PALADIN`-magic container. The
+original tag is baked into every pre-rename file's key derivation, so it is
+accepted on read forever; `kdf_input(dialect)` takes the dialect explicitly.
 
 **Tests first**
 
 - Exact byte layout for a known (password, keyfile) pair, including the literal
-  domain tag and both `u64be` length prefixes.
+  domain tag and both `u64be` length prefixes — locked for **both** dialect
+  tags, and the two dialects must produce different encodings for the same
+  secret.
 - **Ambiguity guard:** `(pw="ab", kf="c")` and `(pw="a", kf="bc")` produce
   *different* encodings (length-prefixing prevents concatenation collisions).
 - Empty password + `None` keyfile → `InvalidOptions`.
@@ -194,6 +199,9 @@ Encoding (exact, §4.2):
 - [x] Empty-both rejection and keyfile size bounds enforced.
 - [x] `Zeroizing` wrapper; zeroize-on-drop verified.
 - [x] All encoding/ambiguity/bounds tests green.
+- [x] Dialect-selected domain tag: `aesc secret v1` written for new files,
+      legacy `paladin secret v1` applied when reading a `PALADIN`-magic
+      container.
 
 ---
 
@@ -282,11 +290,11 @@ string, not a `AescError`, so the caller chooses `MalformedHeader` vs
 
 Range rules (§5.4) — validate **before** deriving:
 
-| KDF      | `kdf_p1`               | `kdf_p2`     | `kdf_p3`        | Extra rule                   |
-| -------- | ---------------------- | ------------ | --------------- | ---------------------------- |
-| Argon2id | memory 8192..=1048576  | time 1..=10  | parallel 1..=16 | Argon2 version `0x13`        |
-| scrypt   | log₂N 10..=20          | r 1..=32     | p 1..=16        | `128 * 2^log₂N * r <= 1 GiB` |
-| PBKDF2   | iters 10000..=10000000 | `== 0`       | `== 0`          | PRF fixed HMAC-SHA256        |
+| KDF      | `kdf_p1`               | `kdf_p2`    | `kdf_p3`        | Extra rule                   |
+|----------|------------------------|-------------|-----------------|------------------------------|
+| Argon2id | memory 8192..=1048576  | time 1..=10 | parallel 1..=16 | Argon2 version `0x13`        |
+| scrypt   | log₂N 10..=20          | r 1..=32    | p 1..=16        | `128 * 2^log₂N * r <= 1 GiB` |
+| PBKDF2   | iters 10000..=10000000 | `== 0`      | `== 0`          | PRF fixed HMAC-SHA256        |
 
 Defaults (§12): Argon2id `{65536, 3, 1}`; scrypt `{15, 8, 1}`; PBKDF2 `{600000}`.
 
@@ -326,7 +334,9 @@ via `aad()` (rather than returning a `(Header, Vec<u8>)` tuple as first sketched
 
 ```rust
 pub enum NameStatus { Absent, Present, IgnoredUnsafe } // drives --info name_status (§6.2)
+pub enum Dialect { Aesc, Paladin } // which native magic the container carries (§5.2)
 pub struct Header {
+    pub dialect: Dialect,
     pub version: u8, pub cipher: CipherId, pub kdf_params: KdfParams,
     pub flags: u8, pub chunk_size: u32,
     pub name: Option<String>, pub name_status: NameStatus,
@@ -355,7 +365,9 @@ neither `.` nor `..` (interior dots allowed).
 Parse order & validation (reject **before** allocating large buffers or
 deriving keys, §5.7 / §11):
 
-1. `magic == "PALADIN"` else `BadMagic`.
+1. `magic == "aesc"` + pad → `Dialect::Aesc`, or the legacy `"PALADIN"` + pad →
+   `Dialect::Paladin`; anything else → `BadMagic`. `serialize` always writes the
+   `aesc` magic (§5.2).
 2. `version == 0x01` else `UnsupportedVersion`.
 3. `cipher_id` known else `UnknownCipher`; `kdf_id` known else `UnknownKdf`.
 4. `flags` bits 2–7 must be 0 else `ReservedFlags`; decode bit0 (name present),
@@ -380,6 +392,8 @@ deriving keys, §5.7 / §11):
 - Valid-but-unsafe name (e.g. `../etc`, `a/b`, `.`, name with control char) →
   parse succeeds with `IgnoredUnsafe`; safe `report.pdf` → `Present`.
 - `is_safe_basename` table-driven accept/reject cases.
+- The legacy `PALADIN` magic parses with `Dialect::Paladin` and otherwise
+  identical fields; `serialize` output always begins with the `aesc` magic.
 
 **Checklist**
 
@@ -387,6 +401,8 @@ deriving keys, §5.7 / §11):
 - [x] `is_safe_basename` per §5.2 (shared with lib option validation).
 - [x] Parse validates magic→version→ids→flags→params→lengths→name in order.
 - [x] Round-trip (all combos), offset, every-rejection, and name-status tests green.
+- [x] Dual-magic parse recorded as `Header.dialect`; `serialize` writes the
+      `aesc` magic only.
 
 ---
 
@@ -493,8 +509,11 @@ strip on decrypt/verify/info.
 **API sketch**
 
 ```rust
-pub(crate) const BEGIN_MARKER: &str = "-----BEGIN PALADIN MESSAGE-----";
-pub(crate) const END_MARKER:   &str = "-----END PALADIN MESSAGE-----";
+pub(crate) const BEGIN_MARKER: &str = "-----BEGIN AESC MESSAGE-----";
+pub(crate) const END_MARKER:   &str = "-----END AESC MESSAGE-----";
+// Legacy markers written by pre-rename builds, accepted on read (§5.6, §14):
+pub(crate) const LEGACY_BEGIN_MARKER: &str = "-----BEGIN PALADIN MESSAGE-----";
+pub(crate) const LEGACY_END_MARKER:   &str = "-----END PALADIN MESSAGE-----";
 pub(crate) const LINE_COLUMNS: usize = 64; // base64 columns per line (48 input bytes)
 
 /// Writer adapter: base64 (RFC 4648 +/=), LF, lines wrapped at exactly 64 cols.
@@ -517,10 +536,12 @@ pub(crate) fn auto_dearmor<R: Read>(input: R) -> Result<DearmorReader<R>>;
 ```
 
 Detection (§5.6): buffer the leading bytes, skip surrounding whitespace, and test
-for the exact `BEGIN` line; if absent, treat input as binary and replay the
-buffered bytes. Accept LF or CRLF; require the exact begin/end marker lines once
-armored. Reject extra non-whitespace outside the markers, non-base64 body, or a
-missing end marker → `MalformedHeader`.
+for the exact `BEGIN` line (the AESC spelling or the legacy PALADIN one); if
+absent, treat input as binary and replay the buffered bytes. Accept LF or CRLF;
+require the exact begin/end marker lines once armored, and the END marker must
+match the BEGIN marker's spelling. Reject extra non-whitespace outside the
+markers, non-base64 body, a missing end marker, or a mixed marker pair →
+`MalformedHeader`. The writer only ever emits the AESC markers.
 
 **Tests first**
 
@@ -533,6 +554,8 @@ missing end marker → `MalformedHeader`.
 - Acceptance: CRLF line endings and surrounding whitespace accepted.
 - Rejection (`MalformedHeader`): junk before BEGIN / after END, invalid base64,
   missing END marker.
+- Legacy `PALADIN MESSAGE` markers still de-armor; a mixed AESC/PALADIN
+  BEGIN/END pair is rejected.
 - **KAT:** the committed armored-container fixture is verified with the stream
   KAT (Phase 10) — it dearmors and decrypts to known plaintext; the armor module
   itself is covered by the round-trip and shape tests above.
@@ -543,6 +566,8 @@ missing end marker → `MalformedHeader`.
 - [x] `auto_dearmor` (returns a `DearmorReader` enum) with peek-based detection and binary pass-through.
 - [x] Round-trip, shape, accept (LF/CRLF/whitespace), and reject tests green
   (the committed armored KAT fixture lives with the stream KAT, Phase 10).
+- [x] AESC markers written; legacy PALADIN markers accepted on read; a mixed
+      BEGIN/END pair rejected.
 
 ---
 
@@ -640,7 +665,9 @@ on `input`, then `stream::decrypt` (to `output`) or `stream::verify` (to
 
 1. `header::parse` → `Header` (the chunk-0 AAD is kept inside it, via `aad()`);
    cancellation check before key derivation.
-2. `kdf_params.derive_key`; cancellation check after KDF.
+2. `kdf_params.derive_key` over `secret.kdf_input(header.dialect)` — the
+   header's magic selects the domain tag (§4.2), so a legacy container derives
+   with the original paladin tag; cancellation check after KDF.
 3. `Cipher::new(header.cipher, &key)`, then STREAM-open each chunk to `output`.
    Consumed input is counted inline (`input_done`, seeded with `aad().len()`) and
    fed to `on_progress`; there is no separate `CountingReader`. **As built,**
@@ -719,6 +746,13 @@ vectors (no `tests/vectors/` directory):
   back to the expected plaintext.
 - One armored fixture: the committed armored container decrypts via the public
   auto-dearmor + stream path, locking the base64 framing.
+- **Legacy dialect locks** (`legacy_known_answer_vectors_still_decrypt`,
+  `legacy_armored_known_answer_vector_still_decrypts`): the pre-dialect-change
+  vectors (PALADIN magic / markers, paladin domain tag) are frozen decrypt-only
+  constants — they can no longer be re-generated, only decrypted — plus real
+  pre-change files committed under `tests/data/legacy/` exercised through the
+  public API in `integration.rs`. Cross-dialect magic rewrites (aesc↔PALADIN)
+  must fail `Auth` in both directions.
 
 **Checklist**
 
@@ -726,6 +760,9 @@ vectors (no `tests/vectors/` directory):
 - [x] Tamper coverage for every §10 negative case with the correct error variant.
 - [x] Committed inline KAT vectors (binary + armored); no `tests/vectors/` directory.
 - [x] Suite runs fast with minimal KDF params.
+- [x] Legacy-dialect locks: frozen pre-change KAT vectors decrypt;
+      `tests/data/legacy/` fixtures decrypt/inspect/verify through the public
+      API; cross-dialect magic rewrites fail `Auth` both ways.
 
 ---
 
@@ -833,22 +870,22 @@ Rules to enforce (from §6.4/§6.5):
 
 ## Test coverage map (`DESIGN.md` §10 → this plan)
 
-| §10 requirement                                             | Phase |
-| ---------------------------------------------------------- | ----- |
-| KDF determinism (same in→same key; diff params→diff key)   | 4     |
-| Secret assembly: domain separation, length prefix, bounds  | 2     |
-| Header serialize↔parse for every cipher/KDF/flag combo     | 5     |
-| Header validation rejects out-of-range / non-UTF-8 / unsafe| 5     |
-| Encrypt-option validation (`InvalidOptions`/`InputTooLarge`)| 9, 6  |
-| Decrypt/verify size-cap enforcement (`InputTooLarge`)      | 6     |
-| ASCII armor accept LF/CRLF/ws; reject junk/base64/no-end   | 7     |
-| STREAM nonce derivation: counter, final flag               | 6     |
-| Pure helpers: default output paths (+ empty-basename)      | 8     |
-| Cipher/KDF `FromStr`/`Display` exact, alias/case rejection | 3, 4  |
-| Round-trip across sizes × ciphers × KDFs                   | 10    |
-| Negative/tamper (flip, downgrade, truncate, append, swap…) | 10    |
-| Known-answer vectors (committed, deterministic generation) | 9, 10 |
-| `aesc-common` glue (I/O, clobber, remove, mapping)     | 11    |
+| §10 requirement                                              | Phase |
+|--------------------------------------------------------------|-------|
+| KDF determinism (same in→same key; diff params→diff key)     | 4     |
+| Secret assembly: domain separation, length prefix, bounds    | 2     |
+| Header serialize↔parse for every cipher/KDF/flag combo       | 5     |
+| Header validation rejects out-of-range / non-UTF-8 / unsafe  | 5     |
+| Encrypt-option validation (`InvalidOptions`/`InputTooLarge`) | 9, 6  |
+| Decrypt/verify size-cap enforcement (`InputTooLarge`)        | 6     |
+| ASCII armor accept LF/CRLF/ws; reject junk/base64/no-end     | 7     |
+| STREAM nonce derivation: counter, final flag                 | 6     |
+| Pure helpers: default output paths (+ empty-basename)        | 8     |
+| Cipher/KDF `FromStr`/`Display` exact, alias/case rejection   | 3, 4  |
+| Round-trip across sizes × ciphers × KDFs                     | 10    |
+| Negative/tamper (flip, downgrade, truncate, append, swap…)   | 10    |
+| Known-answer vectors (committed, deterministic generation)   | 9, 10 |
+| `aesc-common` glue (I/O, clobber, remove, mapping)           | 11    |
 
 ## Definition of done
 

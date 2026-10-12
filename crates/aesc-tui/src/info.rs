@@ -3,7 +3,7 @@
 
 use aesc_core as core;
 
-use core::{AesCryptHeader, Header, KdfParams, Metadata, NameStatus};
+use core::{AesCryptHeader, Dialect, Header, KdfParams, Metadata, NameStatus};
 
 /// Format metadata into ordered `key: value` lines for the Info results pane,
 /// branching on the recognized container format.
@@ -25,9 +25,15 @@ fn format_aesc(header: &Header) -> Vec<String> {
     } else {
         ""
     };
+    // A legacy pre-rename container is called out on the format line
+    // (DESIGN §6.2), matching the CLI's `--info`.
+    let format = match header.dialect {
+        Dialect::Aesc => "aesc",
+        Dialect::Paladin => "aesc (legacy paladin container)",
+    };
 
     vec![
-        "format: aesc".to_string(),
+        format!("format: {format}"),
         format!("version: {}", header.version),
         format!("cipher: {}", header.cipher),
         format!("kdf: {}", header.kdf()),
@@ -101,6 +107,15 @@ mod tests {
         assert!(lines[5].starts_with("flags: 0x"));
         assert_eq!(lines[10], "name_status: absent");
         assert_eq!(lines[11], "name: ");
+    }
+
+    /// A legacy pre-rename container is qualified on the format line, matching
+    /// the CLI (DESIGN §6.2). Uses the committed legacy fixture from the core.
+    #[test]
+    fn legacy_container_is_qualified_on_the_format_line() {
+        const LEGACY: &[u8] = include_bytes!("../../aesc-core/tests/data/legacy/v1.paladin");
+        let lines = format_info(&core::inspect(LEGACY).unwrap());
+        assert_eq!(lines[0], "format: aesc (legacy paladin container)");
     }
 
     #[test]

@@ -15,10 +15,13 @@ use crate::cipher::CipherId;
 use crate::error::{AescError, Result};
 use crate::kdf::{KdfId, KdfParams};
 
-/// File magic (DESIGN §5.2): ASCII "PALADIN" plus a NUL pad to a fixed 8 bytes.
-/// The literal keeps the original "paladin" project name: it is part of the v1
-/// format, so it survives the rename to aesc unchanged.
-const MAGIC: &[u8; 8] = b"PALADIN\0";
+/// File magic written for new files (DESIGN §5.2): ASCII "aesc" plus a NUL pad
+/// to a fixed 8 bytes. Lowercase on purpose so it is visually distinct from
+/// AES Crypt's uppercase "AES" magic.
+const MAGIC: &[u8; 8] = b"aesc\0\0\0\0";
+/// Magic written by pre-rename builds (DESIGN §5.2, §14). Accepted on read
+/// forever — it selects the legacy KDF domain tag (§4.2) — but never written.
+const LEGACY_MAGIC: &[u8; 8] = b"PALADIN\0";
 /// The only format version this build writes or reads (DESIGN §5.2).
 const VERSION: u8 = 0x01;
 /// Allowed `flags` bits: bit0 filename-present, bit1 keyfile-used (DESIGN §5.3).
@@ -32,6 +35,18 @@ const NONCE_PREFIX_LEN: usize = 7;
 /// Valid `chunk_size` range (DESIGN §5.4); shared with encrypt-option validation.
 pub(crate) const CHUNK_SIZE: std::ops::RangeInclusive<u32> = 4096..=16_777_216;
 const NAME_LEN: std::ops::RangeInclusive<usize> = 1..=255;
+
+/// Which native container dialect a header carries (DESIGN §5.2, §14). The
+/// dialect is decided by the magic and selects the KDF domain tag (§4.2); the
+/// container structure is identical in both. New files are only ever written
+/// in the aesc dialect.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Dialect {
+    /// The aesc-branded container every new file is written as.
+    Aesc,
+    /// The legacy paladin-branded container from before the rename; read-only.
+    Paladin,
+}
 
 /// Whether and how a stored original filename can be used (DESIGN §5.2, §6.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,6 +65,9 @@ pub enum NameStatus {
 /// the core; the `pub(crate)` fields keep front-ends from fabricating one.
 #[derive(Debug, Clone)]
 pub struct Header {
+    /// Native dialect the magic announced (DESIGN §5.2): [`Dialect::Paladin`]
+    /// for a pre-rename container, [`Dialect::Aesc`] otherwise.
+    pub dialect: Dialect,
     /// Format version (always [`VERSION`] for a successfully parsed header).
     pub version: u8,
     /// Selected AEAD cipher.
@@ -167,9 +185,13 @@ pub(crate) fn parse<R: Read>(reader: &mut R) -> Result<Header> {
     let mut h: Vec<u8> = Vec::with_capacity(64);
 
     read_field(reader, &mut h, 8)?;
-    if &h[0..8] != MAGIC {
+    let dialect = if &h[0..8] == MAGIC {
+        Dialect::Aesc
+    } else if &h[0..8] == LEGACY_MAGIC {
+        Dialect::Paladin
+    } else {
         return Err(AescError::BadMagic);
-    }
+    };
 
     read_field(reader, &mut h, 1)?;
     let version = h[8];
@@ -253,6 +275,7 @@ pub(crate) fn parse<R: Read>(reader: &mut R) -> Result<Header> {
     };
 
     Ok(Header {
+        dialect,
         version,
         cipher,
         kdf_params,
@@ -322,6 +345,7 @@ mod tests {
                         let bytes =
                             serialize(cipher, params, &SALT16, &NPREFIX, 65536, name, keyfile);
                         let h = parse_bytes(&bytes).unwrap();
+                        assert_eq!(h.dialect, Dialect::Aesc);
                         assert_eq!(h.version, VERSION);
                         assert_eq!(h.cipher, cipher);
                         assert_eq!(h.kdf(), kdf);
@@ -345,6 +369,26 @@ mod tests {
         let mut bytes = default_bytes();
         bytes[0] = b'X';
         assert!(matches!(parse_bytes(&bytes), Err(AescError::BadMagic)));
+    }
+
+    /// Serialize always writes the aesc magic; the same bytes with the legacy
+    /// PALADIN magic parse to an otherwise-identical header marked
+    /// [`Dialect::Paladin`] (DESIGN §5.2, §14).
+    #[test]
+    fn legacy_paladin_magic_parses_as_the_paladin_dialect() {
+        let bytes = default_bytes();
+        assert!(bytes.starts_with(b"aesc\0\0\0\0"));
+
+        let mut legacy = bytes.clone();
+        legacy[0..8].copy_from_slice(b"PALADIN\0");
+        let h = parse_bytes(&legacy).unwrap();
+        assert_eq!(h.dialect, Dialect::Paladin);
+        assert_eq!(h.version, VERSION);
+        assert_eq!(h.cipher, CipherId::Aes256Gcm);
+        assert_eq!(h.salt, SALT16);
+        assert_eq!(h.nonce_prefix, NPREFIX);
+        // The retained AAD bytes are the legacy bytes as read, magic included.
+        assert_eq!(h.aad(), &legacy[..]);
     }
 
     #[test]

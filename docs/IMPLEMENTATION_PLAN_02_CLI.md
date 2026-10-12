@@ -27,34 +27,34 @@ into these APIs. Verified against the current source.
 
 ### From `aesc-core`
 
-| Item                                              | Used by the CLI for                                            |
-| ------------------------------------------------- | -------------------------------------------------------------- |
-| `encrypt` / `decrypt` / `inspect` / `verify`      | The four modes (`-e` / `-d` / `-i` / `--verify`).              |
-| `Secret::new(password, keyfile)`                  | Building the zeroized secret from resolved bytes.             |
-| `EncryptOptions` + `Default`                      | Encrypt knobs; secure defaults from [DESIGN §12](DESIGN.md#12-defaults-summary). |
-| `CipherId` (`FromStr`/`Display`)                  | Parsing `-c/--cipher`; display in `--info`.                   |
-| `KdfId` (`FromStr`/`Display`)                     | Parsing `--kdf`; KDF name in `--info`.                       |
-| `KdfParams` + `KdfParams::default_for(KdfId)`     | Per-KDF cost-knob assembly: start from the KDF default, override supplied knobs. `KdfParams` has no `FromStr`/`Display`; `--info` formats it directly (§7). |
-| `Header`, `NameStatus`                            | `--info` field values and `name_status`.                     |
-| `Progress`, `OnProgress`                          | Progress-callback payload and signature.                     |
-| `default_encrypt_output` / `default_decrypt_output` | Default `-o` derivation (§6.5); decrypt needs a parsed `Header`. |
-| `KEYFILE_MAX_BYTES`                               | (Already enforced inside `read_keyfile`.)                    |
-| `AescError`                                         | Mapped to exit codes via `aesc-common` (never reclassified). |
+| Item                                                | Used by the CLI for                                                                                                                                         |
+|-----------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `encrypt` / `decrypt` / `inspect` / `verify`        | The four modes (`-e` / `-d` / `-i` / `--verify`).                                                                                                           |
+| `Secret::new(password, keyfile)`                    | Building the zeroized secret from resolved bytes.                                                                                                           |
+| `EncryptOptions` + `Default`                        | Encrypt knobs; secure defaults from [DESIGN §12](DESIGN.md#12-defaults-summary).                                                                            |
+| `CipherId` (`FromStr`/`Display`)                    | Parsing `-c/--cipher`; display in `--info`.                                                                                                                 |
+| `KdfId` (`FromStr`/`Display`)                       | Parsing `--kdf`; KDF name in `--info`.                                                                                                                      |
+| `KdfParams` + `KdfParams::default_for(KdfId)`       | Per-KDF cost-knob assembly: start from the KDF default, override supplied knobs. `KdfParams` has no `FromStr`/`Display`; `--info` formats it directly (§7). |
+| `Header`, `NameStatus`                              | `--info` field values and `name_status`.                                                                                                                    |
+| `Progress`, `OnProgress`                            | Progress-callback payload and signature.                                                                                                                    |
+| `default_encrypt_output` / `default_decrypt_output` | Default `-o` derivation (§6.5); decrypt needs a parsed `Header`.                                                                                            |
+| `KEYFILE_MAX_BYTES`                                 | (Already enforced inside `read_keyfile`.)                                                                                                                   |
+| `AescError`                                         | Mapped to exit codes via `aesc-common` (never reclassified).                                                                                                |
 
 ### From `aesc-common`
 
-| Item                                                       | Used by the CLI for                                              |
-| ---------------------------------------------------------- | ---------------------------------------------------------------- |
-| `password_source_from_flags(inline, file, env, no_password)` | Exclusivity check; `Ok(None)` ⇒ prompt interactively.          |
-| `resolve_password(&PasswordSource)`                        | Non-interactive password bytes (handles empty/unset/UTF-8/caps). |
-| `read_keyfile(path)`                                       | Keyfile bytes (existing regular file, 1 B..=1 MiB, non-empty).  |
-| `open_input(path)` / `is_stdio(path)` / `require_regular_file(path)` | Input stream + `-`/regular-file rules.                  |
-| `open_output(target, force, input)` → `OutputSink`         | Clobber + same-file + regular-file checks; stdout vs temp file.  |
-| `OutputSink::as_write()` / `OutputSink::commit()`          | Hand a `&mut dyn Write` to the core; finalize on success.        |
-| `best_effort_remove(path)`                                 | `--remove` after success.                                       |
-| `is_same_file(a, b)`                                       | (Already used inside `open_output`.)                            |
-| `exit_code(&AescError)` + `AppError::exit_code()` + `EXIT_*` | The single exit-code mapping.                                  |
-| `AppError` / `AppResult` / `AppError::usage(msg)`          | The CLI's error currency before/around core calls.              |
+| Item                                                                 | Used by the CLI for                                              |
+|----------------------------------------------------------------------|------------------------------------------------------------------|
+| `password_source_from_flags(inline, file, env, no_password)`         | Exclusivity check; `Ok(None)` ⇒ prompt interactively.            |
+| `resolve_password(&PasswordSource)`                                  | Non-interactive password bytes (handles empty/unset/UTF-8/caps). |
+| `read_keyfile(path)`                                                 | Keyfile bytes (existing regular file, 1 B..=1 MiB, non-empty).   |
+| `open_input(path)` / `is_stdio(path)` / `require_regular_file(path)` | Input stream + `-`/regular-file rules.                           |
+| `open_output(target, force, input)` → `OutputSink`                   | Clobber + same-file + regular-file checks; stdout vs temp file.  |
+| `OutputSink::as_write()` / `OutputSink::commit()`                    | Hand a `&mut dyn Write` to the core; finalize on success.        |
+| `best_effort_remove(path)`                                           | `--remove` after success.                                        |
+| `is_same_file(a, b)`                                                 | (Already used inside `open_output`.)                             |
+| `exit_code(&AescError)` + `AppError::exit_code()` + `EXIT_*`         | The single exit-code mapping.                                    |
+| `AppError` / `AppResult` / `AppError::usage(msg)`                    | The CLI's error currency before/around core calls.               |
 
 > **Cleanup-on-failure is automatic.** `OutputSink::File` holds a
 > `NamedTempFile`; if the CLI returns early (error, auth failure, cancellation)
@@ -96,17 +96,17 @@ print the message to stderr and `std::process::exit(e.exit_code())`.
 Per [DESIGN §9](DESIGN.md#9-dependencies). Versions resolved via `cargo add`
 (latest compatible) and pinned in `Cargo.lock`.
 
-| Crate                            | Why                                                            |
-| -------------------------------- | -------------------------------------------------------------- |
-| `aesc-core` (path)           | The four operations + helpers.                                |
-| `aesc-common` (path)         | Terminal glue + exit-code mapping.                            |
-| `clap` (features = `derive`)     | Argument parsing, `--help`, `--version`.                      |
-| `rpassword`                      | No-echo interactive password prompt.                         |
-| `indicatif`                      | Progress bar on stderr.                                       |
-| `zeroize`                        | Hold prompt-captured password bytes in a zeroizing buffer. New CLI use — added to DESIGN §9 (was core-only); see §10–§11. |
-| `ctrlc`                          | SIGINT handler to flip the cancel flag (§6.6). New CLI dep — added to DESIGN §9; see §10–§11. |
-| `assert_cmd`, `predicates` *(dev)* | Integration tests.                                          |
-| `tempfile` *(dev)*               | Test fixtures / temp dirs.                                   |
+| Crate                              | Why                                                                                                                       |
+|------------------------------------|---------------------------------------------------------------------------------------------------------------------------|
+| `aesc-core` (path)                 | The four operations + helpers.                                                                                            |
+| `aesc-common` (path)               | Terminal glue + exit-code mapping.                                                                                        |
+| `clap` (features = `derive`)       | Argument parsing, `--help`, `--version`.                                                                                  |
+| `rpassword`                        | No-echo interactive password prompt.                                                                                      |
+| `indicatif`                        | Progress bar on stderr.                                                                                                   |
+| `zeroize`                          | Hold prompt-captured password bytes in a zeroizing buffer. New CLI use — added to DESIGN §9 (was core-only); see §10–§11. |
+| `ctrlc`                            | SIGINT handler to flip the cancel flag (§6.6). New CLI dep — added to DESIGN §9; see §10–§11.                             |
+| `assert_cmd`, `predicates` *(dev)* | Integration tests.                                                                                                        |
+| `tempfile` *(dev)*                 | Test fixtures / temp dirs.                                                                                                |
 
 ---
 
@@ -119,30 +119,30 @@ strings and are parsed by the core's `FromStr` in `options.rs` (exact lowercase,
 no aliases — let core reject bad values as `InvalidOptions` → exit 2, or
 pre-validate for a friendlier message).
 
-| Field (struct)        | Flag(s)                                  | Type                     | Notes                                  |
-| --------------------- | ---------------------------------------- | ------------------------ | -------------------------------------- |
-| `encrypt`             | `-e, --encrypt`                          | `bool` (group `mode`)    | Exactly one mode required.             |
-| `decrypt`             | `-d, --decrypt`                          | `bool` (group `mode`)    |                                        |
-| `info`                | `-i, --info`                             | `bool` (group `mode`)    | No password, no output.                |
-| `verify`              | `--verify`                               | `bool` (group `mode`)    | No output.                             |
-| `file`                | `<FILE>` positional                      | `PathBuf`                | `-` = stdin.                           |
-| `output`              | `-o, --output`                           | `Option<PathBuf>`        | enc/dec only; `-` = stdout.            |
-| `password`            | `-p, --password`                         | `Option<OsString>`       | Discouraged; non-UTF-8 ⇒ usage error. |
-| `password_file`       | `--password-file`                        | `Option<PathBuf>`        |                                        |
-| `password_env`        | `--password-env`                         | `Option<OsString>`       |                                        |
-| `no_password`         | `--no-password`                          | `bool`                   | Valid only with `-k`.                  |
-| `keyfile`             | `-k, --keyfile`                          | `Option<PathBuf>`        | `-` rejected.                          |
-| `cipher`              | `-c, --cipher`                           | `Option<String>`         | encrypt only.                          |
-| `kdf`                 | `--kdf`                                  | `Option<String>`         | encrypt only.                          |
-| `argon2_memory/time/parallelism` | `--argon2-*`                  | `Option<u32>`            | require argon2id.                      |
-| `scrypt_log_n/r/p`    | `--scrypt-*`                             | `Option<u32>`            | require scrypt.                        |
-| `pbkdf2_iterations`   | `--pbkdf2-iterations`                    | `Option<u32>`            | require pbkdf2.                        |
-| `armor`               | `-a, --armor`                            | `bool`                   | encrypt only.                          |
-| `name`                | `--name`                                 | `bool`                   | encrypt only; rejected with stdin.     |
-| `force`               | `-f, --force`                            | `bool`                   | enc/dec.                               |
-| `remove`              | `--remove`                               | `bool`                   | enc/dec; rejected with stdin.          |
-| `progress`            | `--progress` / `--no-progress`           | `Option<bool>`           | default auto (stderr TTY).             |
-| `verbose` / `quiet`   | `-v, --verbose` / `-q, --quiet`          | `bool`                   | mutually exclusive.                    |
+| Field (struct)                   | Flag(s)                         | Type                  | Notes                                 |
+|----------------------------------|---------------------------------|-----------------------|---------------------------------------|
+| `encrypt`                        | `-e, --encrypt`                 | `bool` (group `mode`) | Exactly one mode required.            |
+| `decrypt`                        | `-d, --decrypt`                 | `bool` (group `mode`) |                                       |
+| `info`                           | `-i, --info`                    | `bool` (group `mode`) | No password, no output.               |
+| `verify`                         | `--verify`                      | `bool` (group `mode`) | No output.                            |
+| `file`                           | `<FILE>` positional             | `PathBuf`             | `-` = stdin.                          |
+| `output`                         | `-o, --output`                  | `Option<PathBuf>`     | enc/dec only; `-` = stdout.           |
+| `password`                       | `-p, --password`                | `Option<OsString>`    | Discouraged; non-UTF-8 ⇒ usage error. |
+| `password_file`                  | `--password-file`               | `Option<PathBuf>`     |                                       |
+| `password_env`                   | `--password-env`                | `Option<OsString>`    |                                       |
+| `no_password`                    | `--no-password`                 | `bool`                | Valid only with `-k`.                 |
+| `keyfile`                        | `-k, --keyfile`                 | `Option<PathBuf>`     | `-` rejected.                         |
+| `cipher`                         | `-c, --cipher`                  | `Option<String>`      | encrypt only.                         |
+| `kdf`                            | `--kdf`                         | `Option<String>`      | encrypt only.                         |
+| `argon2_memory/time/parallelism` | `--argon2-*`                    | `Option<u32>`         | require argon2id.                     |
+| `scrypt_log_n/r/p`               | `--scrypt-*`                    | `Option<u32>`         | require scrypt.                       |
+| `pbkdf2_iterations`              | `--pbkdf2-iterations`           | `Option<u32>`         | require pbkdf2.                       |
+| `armor`                          | `-a, --armor`                   | `bool`                | encrypt only.                         |
+| `name`                           | `--name`                        | `bool`                | encrypt only; rejected with stdin.    |
+| `force`                          | `-f, --force`                   | `bool`                | enc/dec.                              |
+| `remove`                         | `--remove`                      | `bool`                | enc/dec; rejected with stdin.         |
+| `progress`                       | `--progress` / `--no-progress`  | `Option<bool>`        | default auto (stderr TTY).            |
+| `verbose` / `quiet`              | `-v, --verbose` / `-q, --quiet` | `bool`                | mutually exclusive.                   |
 
 clap expresses what it can (the required mode group, `-V`/`-h`). Cross-flag
 rules that clap can't cleanly state (mode→flag applicability, KDF-knob↔`--kdf`,
@@ -300,24 +300,24 @@ Consolidate/extend the `assert_cmd` cases enumerated in §8.
 
 Confirms every §6 rule has a home and is not duplicated.
 
-| Rule (DESIGN §6)                                          | Enforced in                                  |
-| --------------------------------------------------------- | -------------------------------------------- |
-| Exactly one mode; one `<FILE>`; `-`=stdin                 | `cli.rs` (clap group) + `run.rs`             |
-| Flag-not-applicable-to-mode ⇒ exit 2                      | `validate.rs`                                |
-| KDF knob requires matching `--kdf`                        | `validate.rs`                                |
-| `-q`/`-v` exclusive; `--progress`+`--quiet` invalid       | `validate.rs`                                |
-| Password-source exclusivity / empty-source rejection      | `common::password_source_from_flags` + `resolve_password` |
-| Interactive prompt; encrypt confirms twice                | `secret.rs` (`rpassword`)                    |
-| `--no-password` only with `-k`                            | `validate.rs` (+ `Secret::new` backstop)     |
-| Keyfile caps / `-` rejected / regular-file                | `common::read_keyfile`                       |
-| Default output paths                                      | `core::default_*_output`                     |
-| Clobber / same-file / regular-file output                 | `common::open_output`                        |
-| Temp-file finalize; `0600`; cleanup on failure            | `common::OutputSink` (drop/commit)           |
-| Stdin requires `-o`; `--remove` rejected with stdin       | `validate.rs` / `run.rs`                     |
-| `--remove` warns-but-exits-0 on delete failure            | `run.rs` + `common::best_effort_remove`      |
-| Size cap, tamper, truncation                              | `aesc-core` (CLI just maps the error)    |
-| Exit-code mapping (`AescError` → 0/1/2/3/4/130)            | `common::exit_code` / `AppError::exit_code`  |
-| SIGINT ⇒ cancel flag ⇒ `Canceled` ⇒ 130                   | `progress.rs` + `main` (`ctrlc`)             |
+| Rule (DESIGN §6)                                     | Enforced in                                               |
+|------------------------------------------------------|-----------------------------------------------------------|
+| Exactly one mode; one `<FILE>`; `-`=stdin            | `cli.rs` (clap group) + `run.rs`                          |
+| Flag-not-applicable-to-mode ⇒ exit 2                 | `validate.rs`                                             |
+| KDF knob requires matching `--kdf`                   | `validate.rs`                                             |
+| `-q`/`-v` exclusive; `--progress`+`--quiet` invalid  | `validate.rs`                                             |
+| Password-source exclusivity / empty-source rejection | `common::password_source_from_flags` + `resolve_password` |
+| Interactive prompt; encrypt confirms twice           | `secret.rs` (`rpassword`)                                 |
+| `--no-password` only with `-k`                       | `validate.rs` (+ `Secret::new` backstop)                  |
+| Keyfile caps / `-` rejected / regular-file           | `common::read_keyfile`                                    |
+| Default output paths                                 | `core::default_*_output`                                  |
+| Clobber / same-file / regular-file output            | `common::open_output`                                     |
+| Temp-file finalize; `0600`; cleanup on failure       | `common::OutputSink` (drop/commit)                        |
+| Stdin requires `-o`; `--remove` rejected with stdin  | `validate.rs` / `run.rs`                                  |
+| `--remove` warns-but-exits-0 on delete failure       | `run.rs` + `common::best_effort_remove`                   |
+| Size cap, tamper, truncation                         | `aesc-core` (CLI just maps the error)                     |
+| Exit-code mapping (`AescError` → 0/1/2/3/4/130)      | `common::exit_code` / `AppError::exit_code`               |
+| SIGINT ⇒ cancel flag ⇒ `Canceled` ⇒ 130              | `progress.rs` + `main` (`ctrlc`)                          |
 
 ---
 
@@ -341,6 +341,9 @@ name_status: <absent|present|ignored_unsafe>
 name: <basename when name_status: present, else empty>
 ```
 
+A container carrying the legacy `PALADIN` magic (`Header.dialect ==
+Dialect::Paladin`, DESIGN §5.2, §14) renders its first line as
+`format: aesc (legacy paladin container)`; everything else is identical.
 `kdf_params` is `memory=<KiB>,time=<N>,parallelism=<N>` (Argon2id),
 `log_n=<N>,r=<N>,p=<N>` (scrypt), or `iterations=<N>` (PBKDF2). A non-UTF-8
 stored name is a `MalformedHeader` (exit 4), not normal output. Armored input is
@@ -362,7 +365,11 @@ per item:
 - Output-equals-input refusal; symlink-resolved and hardlink same-file refusal
   where platform metadata supports it.
 - `-o -` / stdout path; armor round-trip via stdout.
-- Exact `--info` output (per KDF; `present`/`ignored_unsafe`/keyfile-hint).
+- Exact `--info` output (per KDF; `present`/`ignored_unsafe`/keyfile-hint),
+  including the byte-exact legacy-container block (qualified `format:` line)
+  against the committed `tests/data/legacy/` fixture.
+- The committed legacy-dialect fixture decrypts through the binary with its
+  original password and restores its stored filename (DESIGN §14).
 - `--verify` success and failure (exit 0 vs 3).
 - Clobber refusal vs `-f`.
 - KDF-knob/mode mismatch usage errors; `-q`/`-v` and `--progress`/`--quiet`

@@ -8,8 +8,8 @@ use std::path::Path;
 
 use aesc_core::{
     decrypt, default_aescrypt_output, default_decrypt_output, default_encrypt_output, encrypt,
-    inspect, verify, AescError, CipherId, EncryptOptions, Header, KdfId, KdfParams, Metadata,
-    NameStatus, Progress, Secret,
+    inspect, verify, AescError, CipherId, Dialect, EncryptOptions, Header, KdfId, KdfParams,
+    Metadata, NameStatus, Progress, Secret,
 };
 
 fn noop() -> impl FnMut(Progress) -> ControlFlow<()> {
@@ -87,10 +87,10 @@ fn round_trip_every_cipher_kdf_binary_and_armored() {
             for armor in [false, true] {
                 let ct = do_encrypt(&data, &options(cipher, kdf, armor, None));
                 if armor {
-                    assert!(ct.starts_with(b"-----BEGIN PALADIN MESSAGE-----"));
-                    assert!(ct.ends_with(b"-----END PALADIN MESSAGE-----\n"));
+                    assert!(ct.starts_with(b"-----BEGIN AESC MESSAGE-----"));
+                    assert!(ct.ends_with(b"-----END AESC MESSAGE-----\n"));
                 } else {
-                    assert!(ct.starts_with(b"PALADIN\0"));
+                    assert!(ct.starts_with(b"aesc\0\0\0\0"));
                 }
                 assert_eq!(
                     do_decrypt(&ct).unwrap(),
@@ -114,6 +114,7 @@ fn inspect_reads_metadata_from_armored_without_a_secret() {
         ),
     );
     let header = aesc_header(ct.as_slice());
+    assert_eq!(header.dialect, Dialect::Aesc);
     assert_eq!(header.version, 1);
     assert_eq!(header.cipher, CipherId::ChaCha20Poly1305);
     assert_eq!(header.kdf(), KdfId::Argon2id);
@@ -241,6 +242,55 @@ fn keyfile_round_trips_and_sets_the_hint() {
     let mut cb = noop();
     assert!(matches!(
         decrypt(ct.as_slice(), &mut Vec::new(), &no_kf, None, &mut cb),
+        Err(AescError::Auth)
+    ));
+}
+
+/// Genuine legacy-dialect fixtures (committed under `tests/data/legacy/`,
+/// minted by the last pre-dialect-change build — PALADIN magic, legacy domain
+/// tag, PALADIN armor markers), exercised through the public API: decrypt,
+/// inspect, and verify must keep accepting them forever (DESIGN §5.2, §14).
+#[test]
+fn legacy_paladin_fixtures_decrypt_inspect_and_verify() {
+    const LEGACY_BINARY: &[u8] = include_bytes!("data/legacy/v1.paladin");
+    const LEGACY_ARMORED: &[u8] = include_bytes!("data/legacy/v1.paladin.asc");
+    const PLAINTEXT: &[u8] =
+        b"paladin legacy container fixture: encrypted by the last pre-aesc-dialect build.\n";
+    let pw = Secret::new(b"paladin legacy fixture password", None).unwrap();
+
+    assert!(LEGACY_BINARY.starts_with(b"PALADIN\0"));
+    assert!(LEGACY_ARMORED.starts_with(b"-----BEGIN PALADIN MESSAGE-----"));
+
+    for fixture in [LEGACY_BINARY, LEGACY_ARMORED] {
+        let mut out = Vec::new();
+        let mut cb = noop();
+        decrypt(fixture, &mut out, &pw, None, &mut cb).unwrap();
+        assert_eq!(out, PLAINTEXT);
+
+        let mut cb = noop();
+        assert!(verify(fixture, &pw, None, &mut cb).is_ok());
+
+        let header = aesc_header(fixture);
+        assert_eq!(header.dialect, Dialect::Paladin);
+        assert_eq!(header.version, 1);
+    }
+
+    // The binary fixture stores its original filename; decrypt output-path
+    // derivation composes with the legacy header exactly as with a new one.
+    let header = aesc_header(LEGACY_BINARY);
+    assert_eq!(header.name_status, NameStatus::Present);
+    assert_eq!(header.name.as_deref(), Some("legacy.txt"));
+    assert_eq!(
+        default_decrypt_output(Path::new("dir/v1.paladin"), &header),
+        Path::new("dir/legacy.txt")
+    );
+
+    // A wrong password against a legacy container is the same unified auth
+    // failure.
+    let wrong = Secret::new(b"not the fixture password", None).unwrap();
+    let mut cb = noop();
+    assert!(matches!(
+        verify(LEGACY_BINARY, &wrong, None, &mut cb),
         Err(AescError::Auth)
     ));
 }

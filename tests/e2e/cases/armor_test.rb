@@ -9,8 +9,8 @@
 require "test_helper"
 
 class ArmorTest < E2ETest
-  BEGIN_MARKER = "-----BEGIN PALADIN MESSAGE-----"
-  END_MARKER   = "-----END PALADIN MESSAGE-----"
+  BEGIN_MARKER = "-----BEGIN AESC MESSAGE-----"
+  END_MARKER   = "-----END AESC MESSAGE-----"
 
   # `-a` encrypt, then auto-detected decrypt, reproduces the input.
   def test_armored_round_trip

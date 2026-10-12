@@ -3,12 +3,16 @@
 # Backward compatibility: decrypt committed "golden" containers produced by an
 # earlier build so a future format change can't silently break old files
 # (DESIGN §5 is the on-disk contract). The goldens live in tests/fixtures/golden/
-# and are described by golden_manifest.rb; regenerate them deliberately with
-# tests/e2e/regenerate_goldens.rb (never auto-overwrite).
+# and are described by golden_manifest.rb. Two sets are covered (DESIGN §14):
+# the FROZEN legacy `.paladin` goldens minted by the pre-dialect-change build
+# (PALADIN magic, legacy domain tag — they can never be regenerated) and the
+# current `.aesc` goldens (regenerate deliberately with
+# tests/e2e/regenerate_goldens.rb; never auto-overwrite, and never the legacy
+# set).
 #
-# The set covers every cipher × KDF, one armored file, and one stdin-encrypted
+# Each set covers every cipher × KDF, one armored file, and one stdin-encrypted
 # file (no stored filename). All decrypt to the same small canonical plaintext
-# with the fixed golden password.
+# with the single fixed golden password.
 
 require "test_helper"
 require "golden_manifest"
@@ -29,12 +33,14 @@ class BackwardCompatTest < E2ETest
     end
   end
 
-  # `--info` on each golden reports the cipher, KDF, params, and name status it
-  # was generated with — locking the header layout and the shipped KDF defaults.
+  # `--info` on each golden reports the dialect-qualified format line plus the
+  # cipher, KDF, params, and name status it was generated with — locking the
+  # header layout, the dialect detection, and the recorded KDF costs.
   def test_each_golden_info_reports_expected_metadata
     Golden.manifest.each do |g|
       info = aesc("-i", g[:path])
       assert_status info, 0, "info failed on #{g[:file]}"
+      assert_includes info.stdout, "#{g[:format_line]}\n", "#{g[:file]} format line"
       assert_includes info.stdout, "cipher: #{g[:cipher]}\n", "#{g[:file]} cipher"
       assert_includes info.stdout, "kdf: #{g[:kdf]}\n", "#{g[:file]} kdf"
       assert_includes info.stdout, "kdf_params: #{g[:params]}\n", "#{g[:file]} params"

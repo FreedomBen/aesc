@@ -218,7 +218,8 @@ After armor is stripped (an AES Crypt file is binary and passes
 `armor::auto_dearmor` through untouched), the core peeks the leading bytes and
 dispatches:
 
-- `"PALADIN"` → the existing aesc path (`header::parse` + `stream::*`).
+- a native magic — `"aesc"`, or the legacy `"PALADIN"` (DESIGN §5.2) → the
+  existing aesc path (`header::parse` + `stream::*`).
 - `"AES"` → the new `aescrypt` path; that parser reports
   `UnsupportedAesCryptVersion(version)` when the version byte is not supported.
 - anything else → [`AescError::BadMagic`] (exit 4), with the user-facing message
@@ -361,8 +362,9 @@ pub(crate) enum Format { Aesc, AesCrypt }
 pub(crate) fn detect<R: Read>(input: R) -> Result<(Format, impl Read)>;
 ```
 
-Reads up to 8 bytes, matches `"PALADIN"` vs `"AES"`, and returns
-`prefix.chain(input)`. **Tests:** aesc magic, AES magic (including an
+Reads up to 8 bytes, matches a native magic (`"aesc"` or the legacy
+`"PALADIN"`, both NUL-padded — DESIGN §5.2) vs `"AES"`, and returns
+`prefix.chain(input)`. **Tests:** both native magics, AES magic (including an
 unsupported AES version routed to the AES parser), short recognized-prefix input,
 and foreign magic each classified correctly; the re-chained reader reproduces
 the original bytes.

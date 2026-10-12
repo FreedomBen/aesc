@@ -8,10 +8,13 @@ shared core. The default cipher is **AES-256-GCM** and the default KDF is
 so they can be identified and decrypted with only the password (or keyfile) — no
 out-of-band parameters.
 
-> **Formerly paladin.** The project was renamed to **aesc**; the on-disk format
-> is unchanged, so every file written by paladin decrypts with aesc (and vice
-> versa). New files get the `.aesc` extension, and the legacy `.paladin` suffix
-> stays recognized when deriving decrypt output names.
+> **Formerly paladin.** The project was renamed to **aesc**. Every file written
+> by paladin keeps decrypting with aesc forever: the legacy container (its
+> `PALADIN` magic, armor markers, and KDF domain tag) is detected and read
+> automatically, and the legacy `.paladin` suffix stays recognized when
+> deriving decrypt output names. New files are written with aesc's own
+> identifiers and the `.aesc` extension, so old paladin builds cannot read
+> files created by aesc.
 
 > **Project status.** All three front-ends are implemented. The shared
 > libraries — `aesc-core` (all crypto, file format, streaming, helpers) and
@@ -495,9 +498,10 @@ associated data) followed by a **STREAM**-chunked body; all integers are
 big-endian. The entire serialized header is the associated data for chunk 0, so
 the cipher, KDF, parameters, and optional filename cannot be tampered with
 (downgrade-resistant). With `--armor`, the binary container is base64-wrapped in
-PEM-style `-----BEGIN/END PALADIN MESSAGE-----` markers (the marker text keeps
-the project's former name — it is part of the file format, so armored files
-stay interchangeable with pre-rename builds).
+PEM-style `-----BEGIN/END AESC MESSAGE-----` markers. Files from pre-rename
+paladin builds — the `PALADIN` magic, `PALADIN MESSAGE` markers, and the legacy
+KDF domain tag — are detected and decrypt transparently, forever (`--info`
+reports them as `format: aesc (legacy paladin container)`).
 
 - **Ciphers:** AES-256-GCM (default) or ChaCha20-Poly1305.
 - **KDFs:** Argon2id (default), scrypt, or PBKDF2-HMAC-SHA256.

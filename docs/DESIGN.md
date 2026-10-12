@@ -1,8 +1,8 @@
 # aesc — Design
 
-**Status:** Core libraries (`aesc-core`, `aesc-common`) and all three front-ends (CLI/TUI/GTK) implemented and tested. Renamed from **paladin** to **aesc** (§14) with the on-disk format unchanged.
+**Status:** Core libraries (`aesc-core`, `aesc-common`) and all three front-ends (CLI/TUI/GTK) implemented and tested. Renamed from **paladin** to **aesc** (§14); new files carry aesc-branded format identifiers while legacy paladin containers stay readable (§5.2, §14).
 **Target stack:** Rust 1.94+, [relm4](https://relm4.org/) (gtk4-rs + libadwaita), [ratatui](https://ratatui.rs/).
-**Last updated:** 2026-10-11
+**Last updated:** 2026-10-12
 
 `aesc` is a simple, safe symmetric file encryption tool. It ships as three
 **thin front-ends over one shared core library** — a scriptable CLI
@@ -234,9 +234,9 @@ pub fn is_armored(prefix: &[u8]) -> bool;                  // §5.6 begin-marker
 ```
 
 `decrypt`, `verify`, and `inspect` auto-detect the container format after armor
-is stripped: a `PALADIN` magic (§5.2) takes the native path, an `AES` magic
-takes the AES Crypt read path (§5.8). Encryption always writes aesc's own
-format.
+is stripped: a native magic — `aesc`, or the legacy `PALADIN` (§5.2) — takes the
+native path, an `AES` magic takes the AES Crypt read path (§5.8). Encryption
+always writes aesc's own format with the `aesc` magic.
 
 ### 2.4 Data flow
 
@@ -301,13 +301,16 @@ key (32 bytes) = KDF(secret_input, salt, params)
 
 - `salt` is 16 random bytes, fresh per file, stored in the header.
 - `secret_input` is a domain-separated, length-prefixed encoding:
-  `b"paladin secret v1\0" || u64be(password_len) || password_bytes ||
+  `domain_tag || u64be(password_len) || password_bytes ||
   u64be(keyfile_len) || keyfile_bytes`, where `u64be` is an unsigned 64-bit
-  big-endian length. The domain tag keeps the original "paladin" project name:
-  it is baked into every v1 file's key derivation, so it survives the rename to
-  aesc unchanged (§14). This avoids ambiguity between passwords and keyfile
-  contents. Each part may be empty, but not both; creating a `Secret` with no
-  password bytes and no keyfile bytes is an error.
+  big-endian length. The domain tag is selected by the container's magic
+  (§5.2): a new file derives with `b"aesc secret v1\0"`, while a file carrying
+  the legacy `PALADIN` magic derives with the original `b"paladin secret v1\0"`
+  tag it was encrypted under (§14). The tag separates the two dialects' key
+  spaces — the same password and salt derive different keys — and the length
+  prefixes avoid ambiguity between passwords and keyfile contents. Each part
+  may be empty, but not both; creating a `Secret` with no password bytes and no
+  keyfile bytes is an error.
 - `params` are stored in the header so decrypt re-derives the identical key.
 - Because the salt is random per file, encrypting two files with the same
   password yields different keys with overwhelming probability — so AEAD keys
@@ -397,7 +400,7 @@ authenticated via AAD during decrypt/verify.
 
 | Offset            | Size               | Field              | Notes                                              |
 |-------------------|--------------------|--------------------|----------------------------------------------------|
-| 0                 | 8                  | `magic`            | ASCII `"PALADIN"` + trailing `0x00` pad            |
+| 0                 | 8                  | `magic`            | ASCII `"aesc"` + `0x00` pad (legacy: `"PALADIN"`)  |
 | 8                 | 1                  | `version`          | `0x01`                                             |
 | 9                 | 1                  | `cipher_id`        | `0x01` AES-256-GCM · `0x02` ChaCha20-Poly1305      |
 | 10                | 1                  | `kdf_id`           | `0x01` Argon2id · `0x02` scrypt · `0x03` PBKDF2    |
@@ -418,11 +421,14 @@ optional `name` field, i.e. everything before the body. `name_len` is a `u16`
 even though v1 caps names at 255 bytes; the wider field reserves headroom to
 raise the limit in a future version without changing the layout.
 
-The magic keeps the ASCII `"PALADIN"` identifier from the project's original
-name: it is part of the v1 format, so changing it would orphan every existing
-file. The application rename to aesc (§14) deliberately left the on-disk format
-— magic, armor markers (§5.6), and KDF domain tag (§4.2) — byte-identical;
-only the default output *filename* extension changed (§6.5).
+The magic is ASCII `"aesc"` NUL-padded to 8 bytes; the lowercase spelling keeps
+it visually distinct from AES Crypt's uppercase `"AES"` magic (§5.8). Files
+written before the dialect change (§14) instead begin with the original
+`"PALADIN"` + NUL-pad magic from the project's pre-rename name. Both magics are
+accepted on read forever; the magic selects the KDF domain tag (§4.2) and is
+bound as chunk-0 AAD (§5.1), so it cannot be rewritten without failing
+authentication. Everything after the magic is identical in both dialects. New
+files are only ever written with the `"aesc"` magic.
 
 When the filename flag is present, `name` is a display/output hint only — never
 trusted as a path. A well-formed `name` is a single UTF-8 basename of 1..=255
@@ -525,9 +531,9 @@ bytes (~117 bytes overhead).
 With `--armor`, the binary container is base64-encoded and wrapped:
 
 ```
------BEGIN PALADIN MESSAGE-----
+-----BEGIN AESC MESSAGE-----
 <base64, wrapped at 64 columns>
------END PALADIN MESSAGE-----
+-----END AESC MESSAGE-----
 ```
 
 Encryption uses standard base64 (RFC 4648 `+`/`/` alphabet, with `=` padding),
@@ -536,16 +542,17 @@ the final line shorter when needed), and emits no extra text before the begin
 marker or after the end marker. The END marker line is
 terminated by a single LF, so the armored output ends with exactly one newline
 and no trailing blank line. Decrypt,
-verify, and info auto-detect armor by the `-----BEGIN PALADIN MESSAGE-----`
-line and strip it before parsing the binary header. They accept LF or CRLF line
-endings and surrounding whitespace, but require the exact begin/end marker
-lines once armor is detected. Extra non-whitespace outside the markers,
-non-base64 body content, or a missing end marker is malformed armor
-(`MalformedHeader`, exit 4). Armor is purely an outer transport encoding; it is
-not represented in the binary header. Like the magic (§5.2), the
-`PALADIN MESSAGE` marker text is part of the v1 format and survives the rename
-to aesc unchanged, so armored files remain interchangeable with pre-rename
-builds.
+verify, and info auto-detect armor by the `-----BEGIN AESC MESSAGE-----` line —
+or the legacy `-----BEGIN PALADIN MESSAGE-----` written by pre-rename builds
+(§14) — and strip it before parsing the binary header. They accept LF or CRLF
+line endings and surrounding whitespace, but require the exact begin/end marker
+lines once armor is detected, and the END marker must carry the same spelling
+as the BEGIN marker (a mixed pair is malformed). Extra non-whitespace outside
+the markers, non-base64 body content, or a missing end marker is malformed
+armor (`MalformedHeader`, exit 4). Armor is purely an outer transport encoding;
+it is not represented in the binary header, and the marker spelling is detected
+independently of the inner magic (§5.2). New files are only ever written with
+the `AESC MESSAGE` markers.
 
 ### 5.7 Versioning & forward compatibility
 
@@ -561,7 +568,8 @@ the *defaults* for new files evolve over time.
 As an interoperability convenience, `decrypt`, `verify`, and `inspect` also read
 foreign [AES Crypt](https://www.aescrypt.com/) (`.aes`) files. Detection is
 automatic: after armor is stripped, a leading `AES` magic takes the AES Crypt
-path and a `PALADIN` magic takes the native path. **Encryption never writes
+path and a native `aesc` (or legacy `PALADIN`) magic takes the native path
+(§5.2). **Encryption never writes
 AES Crypt** — aesc only ever emits its own container (§5.1). This is read
 interop, not an endorsement of the legacy format; the recommended migration is
 to decrypt a `.aes` file and re-encrypt it with aesc.
@@ -638,7 +646,9 @@ escape codes.
 `--info` writes stable UTF-8 `key: value` lines to stdout in this exact order:
 `format`, `version`, `cipher`, `kdf`, `kdf_params`, `flags`, `keyfile_hint`,
 `chunk_size`, `salt_len`, `nonce_prefix_len`, `name_status`, and `name`. Values
-are display forms from the shared core helpers: `format: aesc`, decimal
+are display forms from the shared core helpers: `format: aesc` — or
+`format: aesc (legacy paladin container)` for a file carrying the legacy
+`PALADIN` magic (§5.2) — decimal
 numeric values, lowercase cipher/KDF names, `flags` as two-digit lowercase hex
 (`0x00`), and `keyfile_hint: true|false`. `kdf_params` is
 `memory=<KiB>,time=<N>,parallelism=<N>` for Argon2id, `log_n=<N>,r=<N>,p=<N>`
@@ -1154,7 +1164,11 @@ and KDF.
 **Known-answer vectors:** commit fixed encrypted blobs to catch accidental
 format changes across versions. Vector generation uses a test-only deterministic
 salt/nonce-prefix source so fixtures are reproducible; production encryption
-always uses OS randomness.
+always uses OS randomness. The vectors and fixtures minted before the dialect
+change (§14) are frozen as decrypt-only locks — they can no longer be
+regenerated, and they are what proves the legacy `PALADIN` read path never
+breaks. Cross-dialect tamper tests rewrite the magic in each direction and
+assert an auth failure.
 
 **AES Crypt read interop (§5.8):** genuine Stream Format 2 `.aes` fixtures are
 minted by the reference `aescrypt` tool (committed under
@@ -1292,11 +1306,14 @@ implementation begins, and tests in §10 verify each integrity property.
 | GTK editor text cap  | 8 MiB (§8.4)                    |
 | Key length           | 32 bytes (256-bit)              |
 | Tag length           | 16 bytes (128-bit)              |
+| Magic / domain tag   | `"aesc"` / `aesc secret v1`     |
+| Armor markers        | `BEGIN/END AESC MESSAGE`        |
 | Output extension     | `.aesc` (`.aesc.asc` armored)   |
 
-Legacy `.paladin`/`.paladin.asc` suffixes (from before the rename) and foreign
-AES Crypt `.aes` files remain accepted on read (§5.8, §6.5); only the write
-default changed.
+Legacy `.paladin`/`.paladin.asc` suffixes, legacy `PALADIN`-magic containers
+and `PALADIN MESSAGE` armor markers (all from before the rename, §5.2, §5.6,
+§14), and foreign AES Crypt `.aes` files remain accepted on read; only what new
+files are written as changed.
 
 ---
 
@@ -1377,12 +1394,27 @@ All open questions are now settled:
       **paladin** to **aesc**: crates (`aesc-core`, `aesc-common`, `aesc-cli`,
       `aesc-tui`, `aesc-gtk`), binaries (`aesc`, `aesc-tui`, `aesc-gtk`), the
       GTK app id (`org.aesc.Gtk`), and the default output extension (`.aesc`,
-      `.aesc.asc` armored). The on-disk format is **unchanged**: the
-      `"PALADIN"` magic (§5.2), the armor markers (§5.6), and the KDF domain
-      tag (§4.2) keep their original bytes so every existing file still
-      decrypts and old/new builds stay interchangeable. The legacy `.paladin`
+      `.aesc.asc` armored). The rename itself left the on-disk format
+      byte-identical; the format identifiers were rebranded immediately after —
+      see the next decision. The legacy `.paladin`
       and `.paladin.asc` suffixes stay recognized when deriving decrypt output
       names, but new files are only ever written as `.aesc` (§6.5).
+- [x] **aesc on-disk dialect (2026-10).** Following the rename, new files carry
+      aesc-branded format identifiers: magic `"aesc"` + NUL pad (§5.2), KDF
+      domain tag `b"aesc secret v1\0"` (§4.2), and `AESC MESSAGE` armor markers
+      (§5.6). The container structure is otherwise byte-identical to v1, and
+      the original paladin identifiers are accepted on read forever: a
+      `PALADIN` magic selects the legacy domain tag, and `PALADIN MESSAGE`
+      markers still de-armor, so every pre-change file keeps decrypting. The
+      dialect cannot be forged across: the magic is bound as chunk-0 AAD *and*
+      selects the KDF domain, so rewriting it fails authentication (tested in
+      both directions). Old builds reject the `aesc` magic as unrecognized, so
+      files written by this build are not readable by pre-change builds —
+      intended, and the reason the change landed right after the rename.
+      `--info` reports a legacy container as
+      `format: aesc (legacy paladin container)` (§6.2). The pre-change
+      known-answer vectors and committed `.paladin` fixtures are frozen as
+      decrypt-only locks for the legacy dialect (§10).
 
 ---
 

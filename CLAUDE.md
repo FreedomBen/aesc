@@ -133,7 +133,8 @@ drop) and `EncryptOptions`. Output paths come from the pure helpers
 ### File format & crypto (DESIGN §4–§5)
 
 - Container = authenticated **header** (plaintext, but bound as AEAD AAD) followed
-  by a **STREAM**-chunked body; all integers big-endian. Magic `"PALADIN"`,
+  by a **STREAM**-chunked body; all integers big-endian. Magic `"aesc"`
+  (legacy containers carry `"PALADIN"` and stay readable, DESIGN §5.2),
   `version` byte checked first.
 - The entire serialized header is the AAD for chunk 0, so cipher/KDF/params/
   filename cannot be tampered with (downgrade-resistant).

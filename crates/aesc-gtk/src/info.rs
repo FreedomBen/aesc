@@ -6,7 +6,7 @@
 //! byte-identical to the CLI's `--info` output; [`header_rows`] exposes the same
 //! fields as structured key/value pairs for rendering into widgets.
 
-use aesc_core::{AesCryptHeader, Header, KdfParams, Metadata, NameStatus};
+use aesc_core::{AesCryptHeader, Dialect, Header, KdfParams, Metadata, NameStatus};
 
 /// A single labeled field of header metadata for the Info pane.
 ///
@@ -70,8 +70,14 @@ fn name_value(header: &Header) -> &str {
 /// The keys, order, and value formatting are identical to the CLI's `--info`
 /// output (DESIGN §6.2): twelve rows from `format` through `name`.
 pub fn header_rows(header: &Header) -> Vec<InfoRow> {
+    // A legacy pre-rename container is called out on the format row
+    // (DESIGN §6.2), matching the CLI's `--info`.
+    let format = match header.dialect {
+        Dialect::Aesc => "aesc",
+        Dialect::Paladin => "aesc (legacy paladin container)",
+    };
     vec![
-        InfoRow::new("format", "aesc"),
+        InfoRow::new("format", format),
         InfoRow::new("version", header.version.to_string()),
         InfoRow::new("cipher", header.cipher.to_string()),
         InfoRow::new("kdf", header.kdf().to_string()),
@@ -222,6 +228,23 @@ mod tests {
              name_status: present\n\
              name: note.txt\n";
         assert_eq!(header_text(&header), expected_text);
+    }
+
+    /// A legacy pre-rename container is qualified on the format row, matching
+    /// the CLI (DESIGN §6.2). Uses the committed legacy fixture from the core.
+    #[test]
+    fn legacy_container_is_qualified_on_the_format_row() {
+        const LEGACY: &[u8] = include_bytes!("../../aesc-core/tests/data/legacy/v1.paladin");
+        let header = match inspect(LEGACY).unwrap() {
+            Metadata::Aesc(h) => h,
+            Metadata::AesCrypt(_) => panic!("expected an aesc container"),
+        };
+        let rows = header_rows(&header);
+        assert_eq!(
+            rows[0],
+            InfoRow::new("format", "aesc (legacy paladin container)")
+        );
+        assert!(header_text(&header).starts_with("format: aesc (legacy paladin container)\n"));
     }
 
     #[test]

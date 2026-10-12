@@ -891,7 +891,7 @@ mod tests {
         save_from_editor(b"still armored\n", &ct, &seed.secret, &opts, &cancel, noop).unwrap();
 
         let bytes = fs::read(&ct).unwrap();
-        assert!(bytes.starts_with(b"-----BEGIN PALADIN MESSAGE-----"));
+        assert!(bytes.starts_with(b"-----BEGIN AESC MESSAGE-----"));
         let reopened = open_for_edit(&ct, secret(), &cancel, noop).unwrap();
         assert!(reopened.armored);
         assert_eq!(&**reopened.text, "still armored\n");

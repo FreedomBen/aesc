@@ -24,11 +24,14 @@ use base64::Engine;
 
 use crate::error::{AescError, Result};
 
-// The marker text keeps the original "PALADIN" project name: it is part of the
-// v1 format (DESIGN §5.6), so armored files stay interchangeable with
-// pre-rename builds.
-const BEGIN_MARKER: &str = "-----BEGIN PALADIN MESSAGE-----";
-const END_MARKER: &str = "-----END PALADIN MESSAGE-----";
+// Markers written for new files (DESIGN §5.6).
+const BEGIN_MARKER: &str = "-----BEGIN AESC MESSAGE-----";
+const END_MARKER: &str = "-----END AESC MESSAGE-----";
+// Markers written by pre-rename builds (DESIGN §5.6, §14): accepted on read
+// forever, never written. The END marker must match the BEGIN marker's
+// spelling; a mixed pair is malformed framing.
+const LEGACY_BEGIN_MARKER: &str = "-----BEGIN PALADIN MESSAGE-----";
+const LEGACY_END_MARKER: &str = "-----END PALADIN MESSAGE-----";
 /// Input bytes per armored line: 48 bytes encode to exactly 64 base64 columns.
 const LINE_INPUT: usize = 48;
 /// Output base64 columns per line.
@@ -108,6 +111,9 @@ enum Phase {
 pub(crate) struct ArmorReader<R: Read> {
     inner: R,
     phase: Phase,
+    /// The END marker the body must close with — set by whichever BEGIN marker
+    /// matched (the AESC spelling, or the legacy PALADIN one).
+    end_marker: &'static str,
     /// Current partial line (bytes since the last newline).
     line: Vec<u8>,
     /// Pending base64 characters that have not yet formed a complete 4-char group.
@@ -123,6 +129,7 @@ impl<R: Read> ArmorReader<R> {
         Self {
             inner,
             phase: Phase::Header,
+            end_marker: END_MARKER,
             line: Vec::new(),
             carry: Vec::new(),
             out: Vec::new(),
@@ -185,16 +192,21 @@ impl<R: Read> ArmorReader<R> {
                     return Ok(()); // leading blank lines are allowed
                 }
                 if trimmed.as_slice() == BEGIN_MARKER.as_bytes() {
+                    self.end_marker = END_MARKER;
+                    self.phase = Phase::Body;
+                    Ok(())
+                } else if trimmed.as_slice() == LEGACY_BEGIN_MARKER.as_bytes() {
+                    self.end_marker = LEGACY_END_MARKER;
                     self.phase = Phase::Body;
                     Ok(())
                 } else {
                     Err(AescError::MalformedHeader(
-                        "expected the BEGIN PALADIN MESSAGE marker",
+                        "expected a BEGIN AESC MESSAGE (or legacy PALADIN) marker",
                     ))
                 }
             }
             Phase::Body => {
-                if trimmed.as_slice() == END_MARKER.as_bytes() {
+                if trimmed.as_slice() == self.end_marker.as_bytes() {
                     if !self.carry.is_empty() {
                         return Err(AescError::MalformedHeader(
                             "truncated base64 before END marker",
@@ -202,6 +214,12 @@ impl<R: Read> ArmorReader<R> {
                     }
                     self.phase = Phase::Drain;
                     Ok(())
+                } else if trimmed.as_slice() == END_MARKER.as_bytes()
+                    || trimmed.as_slice() == LEGACY_END_MARKER.as_bytes()
+                {
+                    Err(AescError::MalformedHeader(
+                        "END marker does not match the BEGIN marker",
+                    ))
                 } else if trimmed.is_empty() {
                     Ok(()) // blank lines within the body are ignored
                 } else {
@@ -364,6 +382,46 @@ mod tests {
                 &case[..case.len().min(12)]
             );
         }
+    }
+
+    /// New armored files carry the AESC markers, never the legacy PALADIN ones
+    /// (DESIGN §5.6, §14).
+    #[test]
+    fn writer_emits_aesc_markers() {
+        let text = String::from_utf8(armor(b"marker check")).unwrap();
+        assert!(text.starts_with("-----BEGIN AESC MESSAGE-----\n"));
+        assert!(text.ends_with("-----END AESC MESSAGE-----\n"));
+    }
+
+    /// Armored files written by pre-rename builds carry the PALADIN markers and
+    /// must keep de-armoring (DESIGN §5.6, §14).
+    #[test]
+    fn legacy_paladin_markers_still_dearmor() {
+        let modern = String::from_utf8(armor(b"legacy marker payload")).unwrap();
+        let legacy = modern
+            .replace("BEGIN AESC MESSAGE", "BEGIN PALADIN MESSAGE")
+            .replace("END AESC MESSAGE", "END PALADIN MESSAGE");
+        assert_eq!(
+            dearmor(legacy.as_bytes()).unwrap(),
+            b"legacy marker payload"
+        );
+    }
+
+    /// A BEGIN marker of one dialect with the END marker of the other is
+    /// malformed framing, not silently accepted.
+    #[test]
+    fn mixed_dialect_markers_are_rejected() {
+        let modern = String::from_utf8(armor(b"mixed marker payload")).unwrap();
+        let begin_legacy = modern.replace("BEGIN AESC MESSAGE", "BEGIN PALADIN MESSAGE");
+        assert!(matches!(
+            dearmor(begin_legacy.as_bytes()),
+            Err(AescError::MalformedHeader(_))
+        ));
+        let end_legacy = modern.replace("END AESC MESSAGE", "END PALADIN MESSAGE");
+        assert!(matches!(
+            dearmor(end_legacy.as_bytes()),
+            Err(AescError::MalformedHeader(_))
+        ));
     }
 
     #[test]
