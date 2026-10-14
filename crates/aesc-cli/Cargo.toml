@@ -19,8 +19,8 @@ clap = { version = "4.6.1", features = ["derive"] }
 ctrlc = "3.5.2"
 indicatif = "0.18.4"
 rpassword = "7.5.4"
-aesc-common = { version = "0.3.0", path = "../aesc-common" }
-aesc-core = { version = "0.3.0", path = "../aesc-core" }
+aesc-common = { version = "0.3.1", path = "../aesc-common" }
+aesc-core = { version = "0.3.1", path = "../aesc-core" }
 zeroize = "1.8.2"
 
 [dev-dependencies]

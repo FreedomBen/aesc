@@ -39,7 +39,7 @@ dependencies = [
 
 [[package]]
 name = "aesc-cli"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "aesc-common",
  "aesc-core",
@@ -55,7 +55,7 @@ dependencies = [
 
 [[package]]
 name = "aesc-common"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "aesc-core",
  "tempfile",
@@ -65,7 +65,7 @@ dependencies = [
 
 [[package]]
 name = "aesc-core"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -86,7 +86,7 @@ dependencies = [
 
 [[package]]
 name = "aesc-gtk"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "aesc-core",
  "anyhow",
@@ -100,7 +100,7 @@ dependencies = [
 
 [[package]]
 name = "aesc-tui"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "aesc-common",
  "aesc-core",
