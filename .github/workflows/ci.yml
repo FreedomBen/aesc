@@ -105,6 +105,15 @@ jobs:
       - name: Build the .deb and .rpm packages
         run: make package
 
+      # The paladin→aesc successor metadata must stay version-scoped: an
+      # unversioned Obsoletes/Conflicts/Provides on the old name blocks the
+      # unrelated "paladin" project from installing. rpm is only needed to
+      # inspect the built .rpm files; dpkg-deb ships with the runner.
+      - name: Verify rename metadata stays version-scoped
+        run: |
+          sudo apt-get install -y --no-install-recommends rpm
+          ./packaging/verify-rename-metadata.sh dist
+
       - uses: actions/upload-artifact@v7
         with:
           name: packages

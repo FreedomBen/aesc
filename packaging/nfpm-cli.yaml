@@ -7,15 +7,8 @@
 #
 # nfpm reference: https://nfpm.goreleaser.com
 name: aesc
-# The package was renamed from "paladin"; declaring the old name lets package
-# managers treat this as its successor (deb: Replaces/Conflicts/Provides,
-# rpm: Obsoletes/Conflicts/Provides).
-provides:
-  - paladin
-replaces:
-  - paladin
-conflicts:
-  - paladin
+# Successor metadata for the rename from "paladin" lives under `overrides`
+# below — it must stay version-scoped, see the comment there.
 arch: ${ARCH}
 platform: linux
 version: ${VERSION}
@@ -47,10 +40,26 @@ contents:
 
 # nfpm does not derive shared-library dependencies; declare them per packager.
 # A statically-linked Rust binary still links libc dynamically.
+#
+# The package was renamed from "paladin" (last release under that name:
+# 0.2.1). The replaces/conflicts below (deb: Replaces/Conflicts,
+# rpm: Obsoletes/Conflicts) let installing aesc remove an old paladin
+# package, but are scoped to < 0.3.0 (the first aesc version) so they never
+# block the unrelated "paladin" project from installing — which is also why
+# there is no Provides on the old name. The version-constraint syntax
+# differs per packager, hence the per-format entries.
 overrides:
   deb:
     depends:
       - libc6
+    replaces:
+      - paladin (<< 0.3.0)
+    conflicts:
+      - paladin (<< 0.3.0)
   rpm:
     depends:
       - glibc
+    replaces:
+      - paladin < 0.3.0
+    conflicts:
+      - paladin < 0.3.0
