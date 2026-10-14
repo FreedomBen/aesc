@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 #
-# Check the successor metadata on built packages: the old paladin names must
-# appear only version-scoped (< 0.3.0) in Replaces/Conflicts (deb) and
-# Obsoletes/Conflicts (rpm), and never in Provides. An unrelated "paladin"
-# project exists, and an unversioned claim on the name blocks it from
-# installing (see the comments in packaging/nfpm-*.yaml).
+# Check that the built packages make no claim on the old paladin names: no
+# Provides/Replaces/Conflicts (deb) and no Provides/Obsoletes/Conflicts (rpm)
+# may mention paladin. An unrelated "paladin" project exists at versions below
+# ours, so any constraint on the name — even version-scoped — blocks it from
+# installing (see the comments in packaging/nfpm-*.yaml). Upgrades from the
+# old paladin <= 0.2.1 packages remove them by hand instead.
 #
 # Usage: packaging/verify-rename-metadata.sh [distdir]   (default: dist)
 #
@@ -15,7 +16,6 @@
 set -euo pipefail
 
 DISTDIR="${1:-dist}"
-CUTOFF="0.3.0"
 
 failures=0
 checked=0
@@ -25,34 +25,13 @@ fail() {
   failures=$((failures + 1))
 }
 
-# Map a package name to the pre-rename name it supersedes: aesc -> paladin,
-# aesc-tui -> paladin-tui, aesc-gtk -> paladin-gtk.
-old_name_for() {
-  case "$1" in
-    aesc) echo "paladin" ;;
-    aesc-*) echo "paladin-${1#aesc-}" ;;
-    *) echo "" ;;
-  esac
-}
-
 check_rpm() {
   local pkg="$1"
-  local name old rel entries
-  name="$(rpm -qp --qf '%{NAME}' "${pkg}")"
-  old="$(old_name_for "${name}")"
-  if [ -z "${old}" ]; then
-    fail "${pkg}: unexpected package name '${name}'"
-    return
-  fi
-
-  if rpm -qp --provides "${pkg}" | grep -q '^paladin'; then
-    fail "${pkg}: Provides claims a paladin name"
-  fi
-
-  for rel in obsoletes conflicts; do
-    entries="$(rpm -qp "--${rel}" "${pkg}" | grep '^paladin' || true)"
-    if [ "${entries}" != "${old} < ${CUTOFF}" ]; then
-      fail "${pkg}: ${rel} paladin entries are '${entries}'; want exactly '${old} < ${CUTOFF}'"
+  local rel entries
+  for rel in provides obsoletes conflicts; do
+    entries="$(rpm -qp "--${rel}" "${pkg}" | grep 'paladin' || true)"
+    if [ -n "${entries}" ]; then
+      fail "${pkg}: ${rel} mentions a paladin name: '${entries}'"
     fi
   done
   checked=$((checked + 1))
@@ -60,22 +39,11 @@ check_rpm() {
 
 check_deb() {
   local pkg="$1"
-  local name old field value
-  name="$(dpkg-deb -f "${pkg}" Package)"
-  old="$(old_name_for "${name}")"
-  if [ -z "${old}" ]; then
-    fail "${pkg}: unexpected package name '${name}'"
-    return
-  fi
-
-  if dpkg-deb -f "${pkg}" Provides | grep -q 'paladin'; then
-    fail "${pkg}: Provides claims a paladin name"
-  fi
-
-  for field in Replaces Conflicts; do
+  local field value
+  for field in Provides Replaces Conflicts; do
     value="$(dpkg-deb -f "${pkg}" "${field}")"
-    if [ "${value}" != "${old} (<< ${CUTOFF})" ]; then
-      fail "${pkg}: ${field} is '${value}'; want exactly '${old} (<< ${CUTOFF})'"
+    if echo "${value}" | grep -q 'paladin'; then
+      fail "${pkg}: ${field} mentions a paladin name: '${value}'"
     fi
   done
   checked=$((checked + 1))
@@ -112,4 +80,4 @@ if [ "${failures}" -gt 0 ]; then
   exit 1
 fi
 
-echo "ok: ${checked} package(s) carry correctly scoped rename metadata"
+echo "ok: ${checked} package(s) make no claim on the old paladin names"

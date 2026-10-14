@@ -7,8 +7,11 @@
 #
 # nfpm reference: https://nfpm.goreleaser.com
 name: aesc-gtk
-# Successor metadata for the rename from "paladin-gtk" lives under `overrides`
-# below — it must stay version-scoped, see the comment there.
+# Deliberately no Provides/Replaces/Conflicts/Obsoletes on the old
+# "paladin-gtk" name: an unrelated paladin project exists at versions below
+# ours, so any constraint on the old names blocks it from installing.
+# Upgrading from a paladin-gtk <= 0.2.1 package means removing it by hand;
+# packaging/verify-rename-metadata.sh checks the built packages stay clean.
 arch: ${ARCH}
 platform: linux
 version: ${VERSION}
@@ -83,30 +86,14 @@ contents:
 
 # nfpm does not derive shared-library dependencies; declare the GTK runtime
 # per packager (Debian/Ubuntu vs Fedora/RHEL use different package names).
-#
-# The package was renamed from "paladin-gtk" (last release under that name:
-# 0.2.1). The replaces/conflicts below (deb: Replaces/Conflicts,
-# rpm: Obsoletes/Conflicts) let installing aesc-gtk remove an old
-# paladin-gtk package, but are scoped to < 0.3.0 (the first aesc version) so
-# they never block an unrelated package of that name from installing — which
-# is also why there is no Provides on the old name. The version-constraint
-# syntax differs per packager, hence the per-format entries.
 overrides:
   deb:
     depends:
       - libc6
       - libgtk-4-1
       - libadwaita-1-0
-    replaces:
-      - paladin-gtk (<< 0.3.0)
-    conflicts:
-      - paladin-gtk (<< 0.3.0)
   rpm:
     depends:
       - glibc
       - gtk4
       - libadwaita
-    replaces:
-      - paladin-gtk < 0.3.0
-    conflicts:
-      - paladin-gtk < 0.3.0

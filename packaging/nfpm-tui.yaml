@@ -7,8 +7,11 @@
 #
 # nfpm reference: https://nfpm.goreleaser.com
 name: aesc-tui
-# Successor metadata for the rename from "paladin-tui" lives under `overrides`
-# below — it must stay version-scoped, see the comment there.
+# Deliberately no Provides/Replaces/Conflicts/Obsoletes on the old
+# "paladin-tui" name: an unrelated paladin project exists at versions below
+# ours, so any constraint on the old names blocks it from installing.
+# Upgrading from a paladin-tui <= 0.2.1 package means removing it by hand;
+# packaging/verify-rename-metadata.sh checks the built packages stay clean.
 arch: ${ARCH}
 platform: linux
 version: ${VERSION}
@@ -38,26 +41,10 @@ contents:
       mode: 0644
 
 # nfpm does not derive shared-library dependencies; declare them per packager.
-#
-# The package was renamed from "paladin-tui" (last release under that name:
-# 0.2.1). The replaces/conflicts below (deb: Replaces/Conflicts,
-# rpm: Obsoletes/Conflicts) let installing aesc-tui remove an old
-# paladin-tui package, but are scoped to < 0.3.0 (the first aesc version) so
-# they never block an unrelated package of that name from installing — which
-# is also why there is no Provides on the old name. The version-constraint
-# syntax differs per packager, hence the per-format entries.
 overrides:
   deb:
     depends:
       - libc6
-    replaces:
-      - paladin-tui (<< 0.3.0)
-    conflicts:
-      - paladin-tui (<< 0.3.0)
   rpm:
     depends:
       - glibc
-    replaces:
-      - paladin-tui < 0.3.0
-    conflicts:
-      - paladin-tui < 0.3.0
