@@ -1,5 +1,7 @@
 # aesc
 
+_Pronounced "Ash", like the English "æ"_
+
 [![CI](https://github.com/FreedomBen/paladin/actions/workflows/ci.yml/badge.svg)](https://github.com/FreedomBen/paladin/actions/workflows/ci.yml)
 
 A simple, safe symmetric file-encryption tool: three thin front-ends over one
