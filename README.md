@@ -2,21 +2,13 @@
 
 _Pronounced "Ash", like the English "æ"_
 
-[![CI](https://github.com/FreedomBen/paladin/actions/workflows/ci.yml/badge.svg)](https://github.com/FreedomBen/paladin/actions/workflows/ci.yml)
+[![CI](https://github.com/FreedomBen/aesc/actions/workflows/ci.yml/badge.svg)](https://github.com/FreedomBen/aesc/actions/workflows/ci.yml)
 
 A simple, safe symmetric file-encryption tool: three thin front-ends over one
 shared core. The default cipher is **AES-256-GCM** and the default KDF is
 **Argon2id**. Encrypted files begin with a self-describing, authenticated header,
 so they can be identified and decrypted with only the password (or keyfile) — no
 out-of-band parameters.
-
-> **Formerly paladin.** The project was renamed to **aesc**. Every file written
-> by paladin keeps decrypting with aesc forever: the legacy container (its
-> `PALADIN` magic, armor markers, and KDF domain tag) is detected and read
-> automatically, and the legacy `.paladin` suffix stays recognized when
-> deriving decrypt output names. New files are written with aesc's own
-> identifiers and the `.aesc` extension, so old paladin builds cannot read
-> files created by aesc.
 
 > **Project status.** All three front-ends are implemented. The shared
 > libraries — `aesc-core` (all crypto, file format, streaming, helpers) and
@@ -71,7 +63,7 @@ generic `Read`/`Write` and reports progress through a callback.
 ## Installing a Release
 
 Every tagged version publishes prebuilt Linux x86-64 packages on the
-[releases page](https://github.com/FreedomBen/paladin/releases) — one `.deb`
+[releases page](https://github.com/FreedomBen/aesc/releases) — one `.deb`
 and one `.rpm` per front-end, plus a `SHA256SUMS` file. Installing a package
 needs no Rust toolchain; each one ships the binary and its extras:
 
@@ -89,7 +81,7 @@ release you want (the newest is shown at the top of the releases page):
 
 ```sh
 VERSION=0.3.1
-BASE="https://github.com/FreedomBen/paladin/releases/download/v${VERSION}"
+BASE="https://github.com/FreedomBen/aesc/releases/download/v${VERSION}"
 curl -LO "${BASE}/aesc_${VERSION}-1_amd64.deb"
 curl -LO "${BASE}/SHA256SUMS"
 sha256sum --check --ignore-missing SHA256SUMS
@@ -100,7 +92,7 @@ sudo apt install "./aesc_${VERSION}-1_amd64.deb"
 
 ```sh
 VERSION=0.3.1
-BASE="https://github.com/FreedomBen/paladin/releases/download/v${VERSION}"
+BASE="https://github.com/FreedomBen/aesc/releases/download/v${VERSION}"
 curl -LO "${BASE}/aesc-${VERSION}-1.x86_64.rpm"
 curl -LO "${BASE}/SHA256SUMS"
 sha256sum --check --ignore-missing SHA256SUMS
@@ -184,7 +176,7 @@ for the C compiler and linker.
 ### 3. Get the source
 
 ```sh
-git clone https://github.com/FreedomBen/paladin.git aesc
+git clone https://github.com/FreedomBen/aesc.git aesc
 cd aesc
 ```
 
@@ -299,7 +291,7 @@ workflow (`.github/workflows/release.yml`), which re-runs the tests, rebuilds
 the packages, and attaches them — together with a `SHA256SUMS` file — to a
 GitHub release. So for tagged versions you can skip the local toolchain
 entirely and grab the packages from the
-[releases page](https://github.com/FreedomBen/paladin/releases).
+[releases page](https://github.com/FreedomBen/aesc/releases).
 
 ## Command-line usage
 
@@ -500,10 +492,7 @@ associated data) followed by a **STREAM**-chunked body; all integers are
 big-endian. The entire serialized header is the associated data for chunk 0, so
 the cipher, KDF, parameters, and optional filename cannot be tampered with
 (downgrade-resistant). With `--armor`, the binary container is base64-wrapped in
-PEM-style `-----BEGIN/END AESC MESSAGE-----` markers. Files from pre-rename
-paladin builds — the `PALADIN` magic, `PALADIN MESSAGE` markers, and the legacy
-KDF domain tag — are detected and decrypt transparently, forever (`--info`
-reports them as `format: aesc (legacy paladin container)`).
+PEM-style `-----BEGIN/END AESC MESSAGE-----` markers.
 
 - **Ciphers:** AES-256-GCM (default) or ChaCha20-Poly1305.
 - **KDFs:** Argon2id (default), scrypt, or PBKDF2-HMAC-SHA256.
