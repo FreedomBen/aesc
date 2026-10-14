@@ -18,6 +18,20 @@ out-of-band parameters.
 > unit-tested, but manual UI verification on a graphical session is still
 > pending. [`DESIGN.md`](docs/DESIGN.md) is the authoritative specification.
 
+## Quick Install
+
+### Fedora/RHEL
+
+You can use this bash snippet to query for the latest rpm release, and install it directly from Github:
+
+```bash
+  AESC_VERSION=$(curl -s https://api.github.com/repos/FreedomBen/aesc/releases/latest | jq -r '.tag_name')
+  AESC_VERSION_NO_V="${AESC_VERSION#v}"
+
+  sudo dnf install \
+    "https://github.com/FreedomBen/aesc/releases/download/${AESC_VERSION}/aesc-${AESC_VERSION_NO_V}-1.x86_64.rpm"
+```
+
 ## Highlights
 
 - **Confidentiality + integrity** via authenticated encryption (AEAD). Any
